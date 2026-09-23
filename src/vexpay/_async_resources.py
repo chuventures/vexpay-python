@@ -44,6 +44,12 @@ class AsyncVpos(AsyncAPIResource):
 class AsyncPagoMovil(AsyncAPIResource):
     """Confirm a Pago Móvil the customer already sent to you."""
 
+    async def receiving_account(self, **options: Unpack[RequestOptions]) -> m.PagoMovilReceivingAccountDto:
+        """The account your customers must send the Pago Móvil to. Don't offer Pago Móvil while ``configured`` is false."""
+        return await self._request_model(
+            "Payments_getPagoMovilReceivingAccount", m.PagoMovilReceivingAccountDto, options=options
+        )
+
     async def verify(
         self, params: Union[m.PagoMovilVerifyDto, Params], **options: Unpack[RequestOptions]
     ) -> m.PaymentReceiptDto:

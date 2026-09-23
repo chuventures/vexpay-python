@@ -1118,6 +1118,38 @@ class VposPaymentDto(BaseModel):
     )
 
 
+class PagoMovilReceivingAccountDto(BaseModel):
+    provider: Literal["r4", "bnc", "sofitasa"] = Field(..., examples=["r4"])
+    """
+    Provider Pago Móvil verify uses for this tenant (same routing as POST /v1/payments/pago-movil/verify).
+    """
+    bankCode: str = Field(..., examples=["0169"])
+    """
+    Four-digit SIMF code of the receiving bank.
+    """
+    bankName: str = Field(..., examples=["Mi Banco"])
+    phone: Optional[str] = Field(..., examples=["04125555555"])
+    """
+    Phone the customer sends the Pago Móvil to (11 digits). Null when not configured.
+    """
+    identification: Optional[str] = Field(..., examples=["13536734"])
+    """
+    Cédula/RIF of the receiving account, as configured. Null when not configured.
+    """
+    configured: bool
+    """
+    True when every receiving detail is set. Do not offer Pago Móvil to customers while false.
+    """
+    missing: list[Literal["phone", "identification"]] = Field(..., examples=[[]])
+    """
+    Receiving details that are not configured yet.
+    """
+    livemode: bool
+    """
+    False for test-mode API keys.
+    """
+
+
 class PagoMovilVerifyDto(BaseModel):
     usdAmount: float = Field(..., examples=[25], ge=0.01, le=100000.0)
     reference: str = Field(..., examples=["12345678"], max_length=32, min_length=4)

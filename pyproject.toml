@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vexpay"
-version = "0.1.0"
+version = "0.1.1"
 description = "Official Python SDK for the VEXPay API — Venezuelan payments (Pago Móvil C2P, cards, débito inmediato), payouts, checkout sessions, and signed webhooks."
 readme = "README.md"
 license = "MIT"

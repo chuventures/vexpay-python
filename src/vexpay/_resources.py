@@ -45,6 +45,12 @@ class Vpos(SyncAPIResource):
 class PagoMovil(SyncAPIResource):
     """Confirm a Pago Móvil the customer already sent to you."""
 
+    def receiving_account(self, **options: Unpack[RequestOptions]) -> m.PagoMovilReceivingAccountDto:
+        """The account your customers must send the Pago Móvil to. Don't offer Pago Móvil while ``configured`` is false."""
+        return self._request_model(
+            "Payments_getPagoMovilReceivingAccount", m.PagoMovilReceivingAccountDto, options=options
+        )
+
     def verify(
         self, params: Union[m.PagoMovilVerifyDto, Params], **options: Unpack[RequestOptions]
     ) -> m.PaymentReceiptDto:

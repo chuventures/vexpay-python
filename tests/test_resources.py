@@ -162,6 +162,36 @@ def test_returns_validated_models(server: MockServer) -> None:
     assert receipt.bcvRate == 800
 
 
+RECEIVING_ACCOUNT = {
+    "provider": "r4",
+    "bankCode": "0169",
+    "bankName": "R4 Conecta",
+    "phone": "04125555555",
+    "identification": "13536734",
+    "configured": True,
+    "missing": [],
+    "livemode": False,
+}
+
+
+def test_pago_movil_receiving_account(server: MockServer) -> None:
+    server.script([Scripted(200, RECEIVING_ACCOUNT)])
+    client = VexPay("k", base_url=server.url)
+    account = client.payments.pago_movil.receiving_account()
+    assert type(account).__name__ == "PagoMovilReceivingAccountDto"
+    assert account.configured is True and account.phone == "04125555555"
+    request = server.requests[-1]
+    assert request.method == "GET"
+    assert request.path == "/v1/payments/pago-movil/receiving-account"
+
+
+async def test_async_pago_movil_receiving_account(server: MockServer) -> None:
+    server.script([Scripted(200, {**RECEIVING_ACCOUNT, "configured": False, "phone": None, "missing": ["phone"]})])
+    async with AsyncVexPay("k", base_url=server.url) as client:
+        account = await client.payments.pago_movil.receiving_account()
+    assert account.configured is False and account.phone is None and account.missing == ["phone"]
+
+
 async def test_async_returns_models(server: MockServer) -> None:
     server.script([Scripted(200, RECEIPT)])
     async with AsyncVexPay("k", base_url=server.url) as client:
