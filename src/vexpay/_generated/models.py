@@ -22,7 +22,7 @@ class ApiErrorDto(BaseModel):
     """
     error: Optional[str] = Field(None, examples=["insufficient_balance"])
     """
-    Machine-readable error code (e.g. `external_ref_conflict`, `insufficient_balance`, `idempotency_key_reused`) or, for Nest default errors, a short label such as `Bad Request`. Domain errors may include extra route-specific fields.
+    Machine-readable error code (e.g. `external_ref_conflict`, `insufficient_balance`, `idempotency_key_reused`, `live_mode_not_activated`) or, for Nest default errors, a short label such as `Bad Request`. Domain errors may include extra route-specific fields.
     """
 
 
@@ -80,6 +80,7 @@ class CreateWebhookDto(BaseModel):
             "tenant.api_key.created",
             "tenant.api_key.rotated",
             "tenant.api_key.revoked",
+            "tenant.live_status_changed",
             "notification.test",
         ]
     ] = Field(..., examples=[["payment.completed", "payment.failed"]])
@@ -114,6 +115,7 @@ class WebhookEndpointDto(BaseModel):
             "tenant.api_key.created",
             "tenant.api_key.rotated",
             "tenant.api_key.revoked",
+            "tenant.live_status_changed",
             "notification.test",
         ]
     ]
@@ -155,6 +157,7 @@ class UpdateWebhookDto(BaseModel):
                 "tenant.api_key.created",
                 "tenant.api_key.rotated",
                 "tenant.api_key.revoked",
+                "tenant.live_status_changed",
                 "notification.test",
             ]
         ]
@@ -864,6 +867,108 @@ class ChangePaymentDto(BaseModel):
     """
 
 
+class CryptoBalanceDto(BaseModel):
+    currency: str = Field(..., examples=["USDT"])
+    availableUsdt: str = Field(..., examples=["97.00"])
+    """
+    USDT available for payouts (ledger).
+    """
+    pendingPayoutUsdt: str = Field(..., examples=["50.10"])
+    """
+    USDT reserved by payouts that have not completed yet.
+    """
+    asOf: AwareDatetime
+
+
+class CreateDepositAddressDto(BaseModel):
+    customerRef: str = Field(..., examples=["user_123"])
+    """
+    Your identifier for the customer this address belongs to (1–128 chars: A–Z a–z 0–9 _ . : @ -).
+    """
+    network: Literal["TRC20", "BEP20", "POLYGON", "SOL", "TON", "ARB1"] = Field(
+        ..., examples=["BEP20"]
+    )
+
+
+class DepositAddressDto(BaseModel):
+    customerRef: str = Field(..., examples=["user_123"])
+    network: str = Field(..., examples=["BEP20"])
+    currency: str = Field(..., examples=["USDT"])
+    address: str = Field(..., examples=["0x9f3c…"])
+    tag: Optional[str] = None
+    """
+    Destination tag / memo the payer must include (TON).
+    """
+    tagRequired: bool
+    """
+    True when the network requires the tag.
+    """
+    createdAt: AwareDatetime
+
+
+class CryptoNetworkDto(BaseModel):
+    network: str = Field(..., examples=["POLYGON"])
+    displayName: str = Field(..., examples=["Polygon"])
+    receiveEnabled: bool
+    payoutEnabled: bool
+    payoutFeeUsdt: str = Field(..., examples=["0.10"])
+    minPayoutUsdt: str = Field(..., examples=["1.00"])
+    tagRequired: bool
+    available: bool
+    """
+    Whether a payout of the requested amount can be sent on this network now.
+    """
+
+
+class CreateCryptoPayoutDto(BaseModel):
+    network: Literal["TRC20", "BEP20", "POLYGON", "SOL", "TON", "ARB1"] = Field(
+        ..., examples=["POLYGON"]
+    )
+    address: str = Field(..., examples=["0x9f3c4e1b2a7d6c5e4f3a2b1c0d9e8f7a6b5c4d3e"])
+    tag: Optional[str] = None
+    """
+    Destination tag / memo (required on TON).
+    """
+    amountUsdt: str = Field(..., examples=["50.00"])
+    """
+    Amount the destination receives, in USDT (max 2 decimals).
+    """
+    customerRef: Optional[str] = Field(None, examples=["user_123"])
+    """
+    Your customer reference, echoed on webhooks.
+    """
+    idempotencyKey: str = Field(..., examples=["withdrawal_8812"])
+    """
+    Unique per payout. Replays return the same payout (200).
+    """
+
+
+class CryptoPayoutDto(BaseModel):
+    id: str
+    object: str = Field(..., examples=["crypto.payout"])
+    currency: str = Field(..., examples=["USDT"])
+    status: Literal["pending", "processing", "completed", "failed"]
+    network: str
+    address: str
+    tag: Optional[str] = None
+    amountUsdt: str = Field(..., examples=["50.00"])
+    feeUsdt: str = Field(..., examples=["0.10"])
+    """
+    Network fee + margin (0 for internal).
+    """
+    customerRef: Optional[str] = None
+    merchantId: Optional[str] = None
+    idempotencyKey: str
+    txHash: Optional[str] = None
+    internal: bool
+    """
+    Settled inside VEXPay (destination is one of your own deposit addresses).
+    """
+    failureReason: Optional[str] = None
+    createdAt: AwareDatetime
+    completedAt: Optional[AwareDatetime] = None
+
+
 class BankResponseDto(BaseModel):
     code: str = Field(..., examples=["0102"])
     """
@@ -909,7 +1014,7 @@ class QuoteResponseDto(BaseModel):
         ],
     )
     """
-    Per-source BCV rates or error objects (e.g. `{ error: "BANK_NOT_CONFIGURED" }`). Keys typically include `vexFx` and `bank`. `sources.bank` prefers R4 MBbcv, then falls back to BNC Services/BCVRates (`provider: "r4" | "bnc"`).
+    Per-source BCV rates or error objects (e.g. `{ error: "BANK_NOT_CONFIGURED" }`). Keys typically include `vexFx` and `bank`. `sources.bank` is the partner-bank BCV rate when available.
     """
 
 
@@ -987,7 +1092,7 @@ class C2pIntentResponseDto(BaseModel):
     """
     otpRequested: bool
     """
-    true when the provider instructed the payer bank to SMS an OTP to the customer (R4 GenerarOtp). false when the customer must generate the token in their bank app.
+    true when the provider instructed the payer bank to SMS an OTP to the customer. false when the customer must generate the token in their bank app.
     """
 
 
@@ -1160,17 +1265,17 @@ class PagoMovilVerifyDto(BaseModel):
     """
     debtorBankCode: Optional[str] = Field(None, examples=["0102"])
     """
-    Payer bank SIMF code. Required when the resolved provider is Sofitasa; ignored by R4/BNC.
+    Payer bank SIMF code. Required for some receiving banks — send it whenever you have it.
     """
     txType: Optional[Literal["pago_movil", "transferencia", "debito_inmediato"]] = (
         Field(None, examples=["transferencia"])
     )
     """
-    Instrument type for providers that need it (Sofitasa). Defaults to transferencia.
+    Instrument type, required by some receiving banks. Defaults to transferencia.
     """
     debtorCellPhone: Optional[str] = Field(None, examples=["04149333844"])
     """
-    Payer Pago Móvil phone. Required for Sofitasa when txType is pago_movil (11-digit local, e.g. 04149333844). Ignored by R4/BNC and for other Sofitasa tx types (those send 0).
+    Payer Pago Móvil phone (11-digit local, e.g. 04149333844). Required by some receiving banks when txType is pago_movil — send it whenever you have it.
     """
 
 
@@ -1418,7 +1523,7 @@ class CreateCheckoutSessionDto(BaseModel):
     """
     Origins allowed to embed this checkout with @vexpay/js. https only; http://localhost:* allowed for test tenants. Omit to allow the hosted URL only.
     """
-    methods: Optional[list[Literal["c2p", "vpos"]]] = None
+    methods: Optional[list[Literal["c2p", "vpos", "usdt"]]] = None
     """
     Payment methods offered. Defaults to every method your account can accept.
     """
@@ -1445,7 +1550,7 @@ class CheckoutSessionResponseDto(BaseModel):
     reference: Optional[str] = None
     metadata: dict[str, str]
     allowedOrigins: list[str]
-    methods: list[Literal["c2p", "vpos"]]
+    methods: list[Literal["c2p", "vpos", "usdt"]]
     successUrl: Optional[str] = None
     cancelUrl: Optional[str] = None
     paymentId: Optional[str] = None

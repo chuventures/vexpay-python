@@ -58,7 +58,7 @@ class PagoMovil(SyncAPIResource):
 
 
 class Debit(SyncAPIResource):
-    """Débito inmediato (requires R4)."""
+    """Débito inmediato (advanced payments, enabled per account)."""
 
     def request_otp(
         self, params: Union[m.GenerateDebitOtpDto, Params], **options: Unpack[RequestOptions]
@@ -74,7 +74,7 @@ class Debit(SyncAPIResource):
 
 
 class Credit(SyncAPIResource):
-    """Crédito inmediato and disbursements (requires R4)."""
+    """Crédito inmediato and disbursements (advanced payments, enabled per account)."""
 
     def create(
         self, params: Union[m.ImmediateCreditDto, Params], **options: Unpack[RequestOptions]
@@ -99,7 +99,7 @@ class Credit(SyncAPIResource):
 
 
 class Operations(SyncAPIResource):
-    """Bank operation status for débito/crédito (requires R4)."""
+    """Bank operation status for débito/crédito (advanced payments, enabled per account)."""
 
     def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.R4OperationResponseDto:
         return self._request_model(
@@ -115,7 +115,7 @@ class Operations(SyncAPIResource):
 
 
 class Dispersals(SyncAPIResource):
-    """Account payout dispersion (requires R4)."""
+    """Account payout dispersion (advanced payments, enabled per account)."""
 
     def create(
         self, params: Union[m.PayoutDto, Params], **options: Unpack[RequestOptions]
@@ -126,7 +126,7 @@ class Dispersals(SyncAPIResource):
 
 
 class Change(SyncAPIResource):
-    """Vuelto / change payments (requires R4)."""
+    """Vuelto / change payments (advanced payments, enabled per account)."""
 
     def create(
         self, params: Union[m.ChangePaymentDto, Params], **options: Unpack[RequestOptions]
@@ -520,3 +520,54 @@ class WebhookEndpoints(SyncAPIResource):
     def send_test(self, **options: Unpack[RequestOptions]) -> m.NotificationTestResponseDto:
         """Send a ``notification.test`` delivery to your endpoints."""
         return self._request_model("Notifications_sendTest", m.NotificationTestResponseDto, options=options)
+
+
+# ── crypto (USDT) ─────────────────────────────────────────────────────────────
+
+
+class CryptoBalance(SyncAPIResource):
+    """Your USDT balance (USDT settles in USDT, never converted to VES)."""
+
+    def retrieve(self, **options: Unpack[RequestOptions]) -> m.CryptoBalanceDto:
+        return self._request_model("Crypto_getBalance", m.CryptoBalanceDto, options=options)
+
+
+class DepositAddresses(SyncAPIResource):
+    """Static USDT deposit addresses per customer and network."""
+
+    def create(
+        self, params: Union[m.CreateDepositAddressDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.DepositAddressDto:
+        """Get or create — the same customer and network always return the same address."""
+        return self._request_model("Crypto_createDepositAddress", m.DepositAddressDto, body=params, options=options)
+
+
+class CryptoNetworks(SyncAPIResource):
+    """Enabled USDT networks with the payout fee and availability for an amount."""
+
+    def list(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> list[m.CryptoNetworkDto]:
+        raw = self._request_json("Crypto_listNetworks", query=params or {}, options=options)
+        return [m.CryptoNetworkDto.model_validate(n) for n in raw]
+
+
+class CryptoPayouts(SyncAPIResource):
+    """USDT payouts to external addresses. ``idempotencyKey`` (in the body) makes retries safe."""
+
+    def create(
+        self, params: Union[m.CreateCryptoPayoutDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.CryptoPayoutDto:
+        return self._request_model("Crypto_createPayout", m.CryptoPayoutDto, body=params, options=options)
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.CryptoPayoutDto:
+        return self._request_model("Crypto_getPayout", m.CryptoPayoutDto, path={"id": id}, options=options)
+
+
+class Crypto(SyncAPIResource):
+    """USDT: deposit addresses, balance, networks and payouts."""
+
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.balance = CryptoBalance(self._http)
+        self.deposit_addresses = DepositAddresses(self._http)
+        self.networks = CryptoNetworks(self._http)
+        self.payouts = CryptoPayouts(self._http)

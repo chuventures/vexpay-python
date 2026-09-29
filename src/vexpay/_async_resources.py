@@ -57,7 +57,7 @@ class AsyncPagoMovil(AsyncAPIResource):
 
 
 class AsyncDebit(AsyncAPIResource):
-    """Débito inmediato (requires R4)."""
+    """Débito inmediato (advanced payments, enabled per account)."""
 
     async def request_otp(
         self, params: Union[m.GenerateDebitOtpDto, Params], **options: Unpack[RequestOptions]
@@ -73,7 +73,7 @@ class AsyncDebit(AsyncAPIResource):
 
 
 class AsyncCredit(AsyncAPIResource):
-    """Crédito inmediato and disbursements (requires R4)."""
+    """Crédito inmediato and disbursements (advanced payments, enabled per account)."""
 
     async def create(
         self, params: Union[m.ImmediateCreditDto, Params], **options: Unpack[RequestOptions]
@@ -98,7 +98,7 @@ class AsyncCredit(AsyncAPIResource):
 
 
 class AsyncOperations(AsyncAPIResource):
-    """Bank operation status for débito/crédito (requires R4)."""
+    """Bank operation status for débito/crédito (advanced payments, enabled per account)."""
 
     async def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.R4OperationResponseDto:
         return await self._request_model(
@@ -114,7 +114,7 @@ class AsyncOperations(AsyncAPIResource):
 
 
 class AsyncDispersals(AsyncAPIResource):
-    """Account payout dispersion (requires R4)."""
+    """Account payout dispersion (advanced payments, enabled per account)."""
 
     async def create(
         self, params: Union[m.PayoutDto, Params], **options: Unpack[RequestOptions]
@@ -125,7 +125,7 @@ class AsyncDispersals(AsyncAPIResource):
 
 
 class AsyncChange(AsyncAPIResource):
-    """Vuelto / change payments (requires R4)."""
+    """Vuelto / change payments (advanced payments, enabled per account)."""
 
     async def create(
         self, params: Union[m.ChangePaymentDto, Params], **options: Unpack[RequestOptions]
@@ -519,3 +519,54 @@ class AsyncWebhookEndpoints(AsyncAPIResource):
     async def send_test(self, **options: Unpack[RequestOptions]) -> m.NotificationTestResponseDto:
         """Send a ``notification.test`` delivery to your endpoints."""
         return await self._request_model("Notifications_sendTest", m.NotificationTestResponseDto, options=options)
+
+
+# ── crypto (USDT) ─────────────────────────────────────────────────────────────
+
+
+class AsyncCryptoBalance(AsyncAPIResource):
+    """Your USDT balance (USDT settles in USDT, never converted to VES)."""
+
+    async def retrieve(self, **options: Unpack[RequestOptions]) -> m.CryptoBalanceDto:
+        return await self._request_model("Crypto_getBalance", m.CryptoBalanceDto, options=options)
+
+
+class AsyncDepositAddresses(AsyncAPIResource):
+    """Static USDT deposit addresses per customer and network."""
+
+    async def create(
+        self, params: Union[m.CreateDepositAddressDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.DepositAddressDto:
+        """Get or create — the same customer and network always return the same address."""
+        return await self._request_model("Crypto_createDepositAddress", m.DepositAddressDto, body=params, options=options)
+
+
+class AsyncCryptoNetworks(AsyncAPIResource):
+    """Enabled USDT networks with the payout fee and availability for an amount."""
+
+    async def list(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> list[m.CryptoNetworkDto]:
+        raw = await self._request_json("Crypto_listNetworks", query=params or {}, options=options)
+        return [m.CryptoNetworkDto.model_validate(n) for n in raw]
+
+
+class AsyncCryptoPayouts(AsyncAPIResource):
+    """USDT payouts to external addresses. ``idempotencyKey`` (in the body) makes retries safe."""
+
+    async def create(
+        self, params: Union[m.CreateCryptoPayoutDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.CryptoPayoutDto:
+        return await self._request_model("Crypto_createPayout", m.CryptoPayoutDto, body=params, options=options)
+
+    async def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.CryptoPayoutDto:
+        return await self._request_model("Crypto_getPayout", m.CryptoPayoutDto, path={"id": id}, options=options)
+
+
+class AsyncCrypto(AsyncAPIResource):
+    """USDT: deposit addresses, balance, networks and payouts."""
+
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.balance = AsyncCryptoBalance(self._http)
+        self.deposit_addresses = AsyncDepositAddresses(self._http)
+        self.networks = AsyncCryptoNetworks(self._http)
+        self.payouts = AsyncCryptoPayouts(self._http)

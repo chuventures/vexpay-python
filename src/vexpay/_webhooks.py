@@ -36,6 +36,7 @@ WEBHOOK_EVENT_NAMES: tuple[str, ...] = (
     "tenant.api_key.created",
     "tenant.api_key.rotated",
     "tenant.api_key.revoked",
+    "tenant.live_status_changed",
     "notification.test",
 )
 

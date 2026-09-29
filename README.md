@@ -78,6 +78,38 @@ if current.status == "paid":
     print("ship order 1042")
 ```
 
+## USDT
+
+USDT settles in USDT, into your VEXPay USDT balance (never converted to VES). It must be enabled on your account — otherwise these calls fail with `method_not_allowed` (403). Pay-ins cost 2.5 % + 0.50 USDT; payouts cost the network fee listed by `crypto.networks.list()`.
+
+```python
+from vexpay import VexPay, VexPayError
+
+vexpay = VexPay()
+
+try:
+    networks = vexpay.crypto.networks.list({"amountUsdt": "50.00"})
+except VexPayError as err:
+    if err.code != "method_not_allowed":
+        raise
+    networks = []  # USDT isn't enabled on this account
+
+if any(n.receiveEnabled for n in networks):
+    # Hosted USDT checkout: the buyer picks a network and gets a deposit address.
+    session = vexpay.checkout.sessions.create(
+        {
+            "amountUsd": 25,
+            "reference": "order-1042",
+            "methods": ["usdt"],
+            "successUrl": "https://shop.example/gracias",
+        }
+    )
+    print(session.url)
+    print(vexpay.crypto.balance.retrieve())
+```
+
+Static deposit addresses (`crypto.deposit_addresses.create({"customerRef": "user_123", "network": "BEP20"})`) fire `payment.completed` with that `customerRef` on every deposit. Payouts (`crypto.payouts.create({... "idempotencyKey": "withdrawal-981"})`) debit amount + network fee and end in `payout.completed` (with `txHash`) or `payout.failed` (refunded). USDT `payment.completed` events add `amountUsdt`, `feeUsdt`, `network`, `txHashes` and `checkoutSession.reference`. **Don't fulfil when `underpaid` is `True`.**
+
 ## Webhooks
 
 VEXPay signs every delivery with a `VexPay-Signature` header. Verify it with the **raw** request body — parsing and re-serializing JSON changes the bytes and breaks the signature (Flask: `request.get_data()`, Django: `request.body`, FastAPI: `await request.body()`).
@@ -232,8 +264,12 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `payments.c2p` | `request`, `execute` |
 | `payments.vpos` | `create` |
 | `payments.pago_movil` | `verify` |
-| `payments.debit` · `credit` · `operations` · `dispersals` · `change` | débito/crédito inmediato and disbursements (R4) |
+| `payments.debit` · `credit` · `operations` · `dispersals` · `change` | débito/crédito inmediato and disbursements (advanced payments) |
 | `checkout.sessions` | `create`, `retrieve` |
+| `crypto.balance` | `retrieve` |
+| `crypto.deposit_addresses` | `create` |
+| `crypto.networks` | `list` |
+| `crypto.payouts` | `create`, `retrieve` |
 | `merchants` | `create`, `list`, `retrieve`, `retrieve_by_ref`, `update`, `delete`, `retrieve_balance`, `transfer`, `list_audit_events`, `start_verification`, `confirm_verification` |
 | `merchants.payout_methods` | `list`, `create`, `set_default`, `delete`, `start_verification`, `confirm_verification` |
 | `payouts` | `create`, `create_instant`, `create_batch`, `list`, `retrieve`, `retrieve_by_ref` |
