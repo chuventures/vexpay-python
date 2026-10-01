@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- `merchants.update()` (sync and async) accepts `applicationFeePercent` to set a merchant's negotiated marketplace commission (`None` returns the merchant to the tenant's default commission), and merchant responses include it. Charges that pass `merchantId` without `applicationFeeVes` / `applicationFeePercent` now apply that commission.
+
 ## 0.2.0
 
 - Add `crypto` for USDT (sync and async): `crypto.balance.retrieve()`, `crypto.deposit_addresses.create()`, `crypto.networks.list()`, `crypto.payouts.create()` / `retrieve()`. USDT settles in USDT in its own balance; the calls raise `method_not_allowed` (403) when USDT isn't enabled on the account.

@@ -703,6 +703,9 @@ class ImmediateDebitDto(BaseModel):
     applicationFeePercent: Optional[float] = Field(
         None, examples=[10], ge=0.0, le=100.0
     )
+    """
+    Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
+    """
 
 
 class ManualOperationPollDto(BaseModel):
@@ -1041,6 +1044,9 @@ class C2pRequestDto(BaseModel):
     applicationFeePercent: Optional[float] = Field(
         None, examples=[10], ge=0.0, le=100.0
     )
+    """
+    Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
+    """
 
 
 class C2pIntentResponseDto(BaseModel):
@@ -1128,7 +1134,7 @@ class C2pPaymentDto(BaseModel):
         None, examples=[10], ge=0.0, le=100.0
     )
     """
-    Optional percent of vesAmount used when applicationFeeVes is omitted.
+    Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
     """
 
 
@@ -1221,6 +1227,9 @@ class VposPaymentDto(BaseModel):
     applicationFeePercent: Optional[float] = Field(
         None, examples=[10], ge=0.0, le=100.0
     )
+    """
+    Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
+    """
 
 
 class PagoMovilReceivingAccountDto(BaseModel):
@@ -1310,6 +1319,10 @@ class MerchantResponseDto(BaseModel):
     autoPayoutEnabled: Optional[bool] = None
     """
     When true, available balance is auto-paid to the default verified method.
+    """
+    applicationFeePercent: Optional[float] = Field(None, examples=[12.5])
+    """
+    Merchant-specific marketplace commission percent. null = the tenant's default commission applies.
     """
     bankCode: Optional[str] = None
     """
@@ -1492,6 +1505,12 @@ class UpdateMerchantDto(BaseModel):
     autoPayoutEnabled: Optional[bool] = None
     """
     When true, a cron job automatically pays available seller balance to the default verified Pago Móvil method.
+    """
+    applicationFeePercent: Optional[float] = Field(
+        None, examples=[12.5], ge=0.0, le=100.0
+    )
+    """
+    Negotiated marketplace commission (percent of vesAmount) retained from payments tagged with this merchant when the request sends no applicationFeeVes / applicationFeePercent. null clears the override so the tenant's default commission applies.
     """
 
 
