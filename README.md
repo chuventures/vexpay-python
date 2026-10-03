@@ -110,6 +110,45 @@ if any(n.receiveEnabled for n in networks):
 
 Static deposit addresses (`crypto.deposit_addresses.create({"customerRef": "user_123", "network": "BEP20"})`) fire `payment.completed` with that `customerRef` on every deposit. Payouts (`crypto.payouts.create({... "idempotencyKey": "withdrawal-981"})`) debit amount + network fee and end in `payout.completed` (with `txHash`) or `payout.failed` (refunded). USDT `payment.completed` events add `amountUsdt`, `feeUsdt`, `network`, `txHashes` and `checkoutSession.reference`. **Don't fulfil when `underpaid` is `True`.**
 
+### USDC
+
+USDC (Polygon and Base) uses the same calls with `"currency": "USDC"`, has its own balance and must be enabled on your account separately. Without `currency`, every call stays in USDT.
+
+```python
+usdc = vexpay.crypto.balance.retrieve({"currency": "USDC"})
+balances = vexpay.crypto.balances.list()  # USDT and USDC
+
+vexpay.crypto.payouts.create(
+    {
+        "currency": "USDC",
+        "network": "BASE",
+        "address": "0x…",
+        "amount": "50.00",
+        "idempotencyKey": "withdrawal-982",
+    }
+)
+```
+
+Responses and events include `currency`, `amount` and `fee` for both coins (`amountUsdt` / `feeUsdt` stay on USDT only). Credit your customer in the `currency` the webhook reports.
+
+## Convert VES to USDT
+
+Turn available VES into your USDT balance. A quote locks the rate (market USDT/VES rate plus your spread) for 60 seconds; accepting it debits the VES at once and returns a `PENDING` conversion. VEXPay then delivers the USDT and sends `conversion.completed` (or `conversion.canceled`, with the VES returned). Conversions must be enabled on your account — otherwise the calls fail with `conversions_not_enabled` (403). In test mode they complete immediately.
+
+```python
+quote = vexpay.conversions.quotes.create({"sourceAmountVes": "10000.00"})  # or {"targetAmountUsdt": "50.00"}
+print(quote.rate, quote.targetAmountUsdt, quote.expiresAt)
+
+conversion = vexpay.conversions.create(
+    {"quoteId": quote.id, "reference": "treasury-2026-10-03"},
+    idempotency_key="convert-2026-10-03",
+)
+
+for c in vexpay.conversions.list({"status": "PENDING"}):
+    print(c.id, c.sourceAmountVes, "→", c.targetAmountUsdt)
+vexpay.conversions.cancel(conversion.id)  # only while PENDING
+```
+
 ## Webhooks
 
 VEXPay signs every delivery with a `VexPay-Signature` header. Verify it with the **raw** request body — parsing and re-serializing JSON changes the bytes and breaks the signature (Flask: `request.get_data()`, Django: `request.body`, FastAPI: `await request.body()`).
@@ -267,9 +306,12 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `payments.debit` · `credit` · `operations` · `dispersals` · `change` | débito/crédito inmediato and disbursements (advanced payments) |
 | `checkout.sessions` | `create`, `retrieve` |
 | `crypto.balance` | `retrieve` |
+| `crypto.balances` | `list` |
 | `crypto.deposit_addresses` | `create` |
 | `crypto.networks` | `list` |
 | `crypto.payouts` | `create`, `retrieve` |
+| `conversions` | `create`, `list`, `retrieve`, `cancel` |
+| `conversions.quotes` | `create` |
 | `merchants` | `create`, `list`, `retrieve`, `retrieve_by_ref`, `update`, `delete`, `retrieve_balance`, `transfer`, `list_audit_events`, `start_verification`, `confirm_verification` |
 | `merchants.payout_methods` | `list`, `create`, `set_default`, `delete`, `start_verification`, `confirm_verification` |
 | `payouts` | `create`, `create_instant`, `create_batch`, `list`, `retrieve`, `retrieve_by_ref` |

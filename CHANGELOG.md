@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Add `conversions` (sync and async) to turn available VES into your USDT balance: `conversions.quotes.create()` locks a rate for 60 seconds (`sourceAmountVes` or `targetAmountUsdt`), `conversions.create({"quoteId": ...})` debits the VES and returns a `PENDING` conversion, plus `conversions.retrieve()`, `conversions.list()` (auto-paginating) and `conversions.cancel()`. New webhook events `conversion.completed` and `conversion.canceled`; the VES balance adds `convertedVes`. Conversions are enabled per account (403 `conversions_not_enabled` otherwise).
+- Add USDC (Polygon and Base) to `crypto` (sync and async): `crypto.balance.retrieve()`, `crypto.deposit_addresses.create()`, `crypto.networks.list()` and `crypto.payouts.create()` accept `"currency": "USDT" | "USDC"` (default USDT, so existing calls are unchanged). New `crypto.balances.list()` returns every stablecoin balance.
+- Payouts take `amount` (`amountUsdt` stays as a USDT-only alias). Crypto responses and `payment.completed` / `payout.*` events add `currency`, `amount` and `fee` for both coins. Checkout sessions accept `"methods": ["usdc"]`.
+
 ## 0.2.1
 
 - `merchants.update()` (sync and async) accepts `applicationFeePercent` to set a merchant's negotiated marketplace commission (`None` returns the merchant to the tenant's default commission), and merchant responses include it. Charges that pass `merchantId` without `applicationFeeVes` / `applicationFeePercent` now apply that commission.

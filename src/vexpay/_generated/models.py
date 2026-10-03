@@ -32,6 +32,10 @@ class PlatformBalanceDto(BaseModel):
     collectedVes: str = Field(..., examples=["10000.00"])
     feesVes: str = Field(..., examples=["250.00"])
     paidOutVes: str = Field(..., examples=["1000.00"])
+    convertedVes: str = Field(..., examples=["0.00"])
+    """
+    Net VES spent on VES→USDT conversions.
+    """
     reserveVes: str = Field(..., examples=["100.00"])
     ledgerNetVes: str = Field(..., examples=["8650.00"])
     availableVes: str = Field(..., examples=["8650.00"])
@@ -76,6 +80,8 @@ class CreateWebhookDto(BaseModel):
             "merchant.wallet_credit",
             "payout.completed",
             "payout.failed",
+            "conversion.completed",
+            "conversion.canceled",
             "tenant.status_changed",
             "tenant.api_key.created",
             "tenant.api_key.rotated",
@@ -111,6 +117,8 @@ class WebhookEndpointDto(BaseModel):
             "merchant.wallet_credit",
             "payout.completed",
             "payout.failed",
+            "conversion.completed",
+            "conversion.canceled",
             "tenant.status_changed",
             "tenant.api_key.created",
             "tenant.api_key.rotated",
@@ -153,6 +161,8 @@ class UpdateWebhookDto(BaseModel):
                 "merchant.wallet_credit",
                 "payout.completed",
                 "payout.failed",
+                "conversion.completed",
+                "conversion.canceled",
                 "tenant.status_changed",
                 "tenant.api_key.created",
                 "tenant.api_key.rotated",
@@ -871,16 +881,31 @@ class ChangePaymentDto(BaseModel):
 
 
 class CryptoBalanceDto(BaseModel):
-    currency: str = Field(..., examples=["USDT"])
-    availableUsdt: str = Field(..., examples=["97.00"])
+    currency: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
+    available: str = Field(..., examples=["97.00"])
     """
-    USDT available for payouts (ledger).
+    Available for payouts, in `currency` (ledger).
     """
-    pendingPayoutUsdt: str = Field(..., examples=["50.10"])
+    pendingPayout: str = Field(..., examples=["50.10"])
     """
-    USDT reserved by payouts that have not completed yet.
+    Reserved by payouts that have not completed yet, in `currency`.
+    """
+    availableUsdt: Optional[str] = Field(None, examples=["97.00"])
+    """
+    USDT only: same as `available`.
+    """
+    pendingPayoutUsdt: Optional[str] = Field(None, examples=["50.10"])
+    """
+    USDT only: same as `pendingPayout`.
     """
     asOf: AwareDatetime
+
+
+class CryptoBalancesDto(BaseModel):
+    data: list[CryptoBalanceDto]
+    """
+    One balance per stablecoin (USDT, USDC).
+    """
 
 
 class CreateDepositAddressDto(BaseModel):
@@ -888,15 +913,22 @@ class CreateDepositAddressDto(BaseModel):
     """
     Your identifier for the customer this address belongs to (1–128 chars: A–Z a–z 0–9 _ . : @ -).
     """
-    network: Literal["TRC20", "BEP20", "POLYGON", "SOL", "TON", "ARB1"] = Field(
+    network: Literal["TRC20", "BEP20", "POLYGON", "SOL", "TON", "ARB1", "BASE"] = Field(
         ..., examples=["BEP20"]
     )
+    """
+    USDT: TRC20, BEP20, POLYGON, SOL, TON, ARB1. USDC: POLYGON, BASE.
+    """
+    currency: Literal["USDT", "USDC"] = Field("USDT", examples=["USDT"])
+    """
+    Stablecoin the address receives.
+    """
 
 
 class DepositAddressDto(BaseModel):
     customerRef: str = Field(..., examples=["user_123"])
     network: str = Field(..., examples=["BEP20"])
-    currency: str = Field(..., examples=["USDT"])
+    currency: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
     address: str = Field(..., examples=["0x9f3c…"])
     tag: Optional[str] = None
     """
@@ -910,12 +942,27 @@ class DepositAddressDto(BaseModel):
 
 
 class CryptoNetworkDto(BaseModel):
+    currency: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
     network: str = Field(..., examples=["POLYGON"])
     displayName: str = Field(..., examples=["Polygon"])
     receiveEnabled: bool
     payoutEnabled: bool
-    payoutFeeUsdt: str = Field(..., examples=["0.10"])
-    minPayoutUsdt: str = Field(..., examples=["1.00"])
+    payoutFee: str = Field(..., examples=["0.10"])
+    """
+    Payout fee in `currency`.
+    """
+    minPayout: str = Field(..., examples=["1.00"])
+    """
+    Minimum payout in `currency`.
+    """
+    payoutFeeUsdt: Optional[str] = Field(None, examples=["0.10"])
+    """
+    USDT only: same as `payoutFee`.
+    """
+    minPayoutUsdt: Optional[str] = Field(None, examples=["1.00"])
+    """
+    USDT only: same as `minPayout`.
+    """
     tagRequired: bool
     available: bool
     """
@@ -924,17 +971,28 @@ class CryptoNetworkDto(BaseModel):
 
 
 class CreateCryptoPayoutDto(BaseModel):
-    network: Literal["TRC20", "BEP20", "POLYGON", "SOL", "TON", "ARB1"] = Field(
+    currency: Literal["USDT", "USDC"] = Field("USDT", examples=["USDT"])
+    """
+    Stablecoin to send; debits that balance.
+    """
+    network: Literal["TRC20", "BEP20", "POLYGON", "SOL", "TON", "ARB1", "BASE"] = Field(
         ..., examples=["POLYGON"]
     )
+    """
+    USDT: TRC20, BEP20, POLYGON, SOL, TON, ARB1. USDC: POLYGON, BASE.
+    """
     address: str = Field(..., examples=["0x9f3c4e1b2a7d6c5e4f3a2b1c0d9e8f7a6b5c4d3e"])
     tag: Optional[str] = None
     """
     Destination tag / memo (required on TON).
     """
-    amountUsdt: str = Field(..., examples=["50.00"])
+    amount: Optional[str] = Field(None, examples=["50.00"])
     """
-    Amount the destination receives, in USDT (max 2 decimals).
+    Amount the destination receives, in `currency` (max 2 decimals).
+    """
+    amountUsdt: Optional[str] = Field(None, examples=["50.00"])
+    """
+    USDT only: alias of `amount`.
     """
     customerRef: Optional[str] = Field(None, examples=["user_123"])
     """
@@ -949,15 +1007,26 @@ class CreateCryptoPayoutDto(BaseModel):
 class CryptoPayoutDto(BaseModel):
     id: str
     object: str = Field(..., examples=["crypto.payout"])
-    currency: str = Field(..., examples=["USDT"])
+    currency: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
     status: Literal["pending", "processing", "completed", "failed"]
     network: str
     address: str
     tag: Optional[str] = None
-    amountUsdt: str = Field(..., examples=["50.00"])
-    feeUsdt: str = Field(..., examples=["0.10"])
+    amount: str = Field(..., examples=["50.00"])
     """
-    Network fee + margin (0 for internal).
+    Amount sent, in `currency`.
+    """
+    fee: str = Field(..., examples=["0.10"])
+    """
+    Network fee + margin, in `currency` (0 for internal).
+    """
+    amountUsdt: Optional[str] = Field(None, examples=["50.00"])
+    """
+    USDT only: same as `amount`.
+    """
+    feeUsdt: Optional[str] = Field(None, examples=["0.10"])
+    """
+    USDT only: same as `fee`.
     """
     customerRef: Optional[str] = None
     merchantId: Optional[str] = None
@@ -970,6 +1039,81 @@ class CryptoPayoutDto(BaseModel):
     failureReason: Optional[str] = None
     createdAt: AwareDatetime
     completedAt: Optional[AwareDatetime] = None
+
+
+class CreateConversionQuoteDto(BaseModel):
+    sourceAmountVes: Optional[str] = Field(None, examples=["10000.00"])
+    """
+    VES to spend. Send this or `targetAmountUsdt`, not both.
+    """
+    targetAmountUsdt: Optional[str] = Field(None, examples=["50.00"])
+    """
+    USDT to receive. Send this or `sourceAmountVes`, not both.
+    """
+
+
+class ConversionQuoteDto(BaseModel):
+    id: str
+    object: str = Field(..., examples=["conversion_quote"])
+    rate: str = Field(..., examples=["998.8299"])
+    """
+    VES per 1 USDT you get: market rate plus your spread.
+    """
+    marketRate: str = Field(..., examples=["979.2450"])
+    """
+    Market USDT/VES rate the quote is based on.
+    """
+    spreadPercent: str = Field(..., examples=["2.0000"])
+    """
+    Your spread, in percent.
+    """
+    rateSource: Literal["market"] = Field(..., examples=["market"])
+    sourceAmountVes: str = Field(..., examples=["10000.00"])
+    targetAmountUsdt: str = Field(..., examples=["10.01"])
+    """
+    Rounded down to the cent.
+    """
+    expiresAt: str
+    """
+    The quote can be accepted until this time (60 seconds).
+    """
+    createdAt: str
+
+
+class CreateConversionDto(BaseModel):
+    quoteId: str
+    """
+    A live quote from `POST /v1/conversions/quotes`. Each quote can be used once.
+    """
+    reference: Optional[str] = Field(None, examples=["treasury-2026-10-03"])
+    """
+    Your reference, echoed on the conversion and its webhooks.
+    """
+
+
+class ConversionDto(BaseModel):
+    id: str
+    object: str = Field(..., examples=["conversion"])
+    status: Literal["PENDING", "COMPLETED", "CANCELED"]
+    reference: Optional[str] = Field(...)
+    rate: str = Field(..., examples=["998.8299"])
+    marketRate: str = Field(..., examples=["979.2450"])
+    spreadPercent: str = Field(..., examples=["2.0000"])
+    rateSource: Literal["market"] = Field(..., examples=["market"])
+    sourceAmountVes: str = Field(..., examples=["10000.00"])
+    targetAmountUsdt: str = Field(..., examples=["10.01"])
+    createdAt: str
+    completedAt: Optional[str] = Field(...)
+    canceledAt: Optional[str] = Field(...)
+    cancelReason: Optional[str] = Field(...)
+
+
+class ConversionListDto(BaseModel):
+    items: list[ConversionDto]
+    nextCursor: Optional[str] = Field(...)
+    """
+    Pass as `cursor` to get the next page.
+    """
 
 
 class BankResponseDto(BaseModel):
@@ -1542,7 +1686,7 @@ class CreateCheckoutSessionDto(BaseModel):
     """
     Origins allowed to embed this checkout with @vexpay/js. https only; http://localhost:* allowed for test tenants. Omit to allow the hosted URL only.
     """
-    methods: Optional[list[Literal["c2p", "vpos", "usdt"]]] = None
+    methods: Optional[list[Literal["c2p", "vpos", "usdt", "usdc"]]] = None
     """
     Payment methods offered. Defaults to every method your account can accept.
     """
@@ -1569,7 +1713,7 @@ class CheckoutSessionResponseDto(BaseModel):
     reference: Optional[str] = None
     metadata: dict[str, str]
     allowedOrigins: list[str]
-    methods: list[Literal["c2p", "vpos", "usdt"]]
+    methods: list[Literal["c2p", "vpos", "usdt", "usdc"]]
     successUrl: Optional[str] = None
     cancelUrl: Optional[str] = None
     paymentId: Optional[str] = None

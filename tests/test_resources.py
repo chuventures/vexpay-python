@@ -205,3 +205,62 @@ def test_list_methods_return_pages() -> None:
         assert inspect.signature(getattr(getattr(sync_client, resource), "list")).return_annotation.startswith("SyncPage[")
         assert inspect.signature(getattr(getattr(async_client, resource), "list")).return_annotation.startswith("AsyncPage[")
     assert SyncPage and AsyncPage
+
+
+def test_usdc_payout_and_balances(server: MockServer) -> None:
+    payout = {
+        "id": "po_1", "object": "crypto.payout", "currency": "USDC", "status": "processing", "network": "BASE",
+        "address": "0x" + "a" * 40, "amount": "10.00", "fee": "0.10", "idempotencyKey": "k1", "internal": False,
+        "createdAt": "2026-10-02T00:00:00.000Z",
+    }
+    balances = {"data": [
+        {"currency": "USDT", "available": "1.00", "pendingPayout": "0.00", "availableUsdt": "1.00", "pendingPayoutUsdt": "0.00", "asOf": "2026-10-02T00:00:00.000Z"},
+        {"currency": "USDC", "available": "4.37", "pendingPayout": "0.00", "asOf": "2026-10-02T00:00:00.000Z"},
+    ]}
+    server.script([
+        Scripted(201, payout),
+        Scripted(200, {"currency": "USDC", "available": "4.37", "pendingPayout": "0.00", "asOf": "2026-10-02T00:00:00.000Z"}),
+        Scripted(200, balances),
+    ])
+    client = VexPay("k", base_url=server.url)
+    created = client.crypto.payouts.create(
+        {"currency": "USDC", "network": "BASE", "address": payout["address"], "amount": "10.00", "idempotencyKey": "k1"}
+    )
+    assert created.currency == "USDC" and created.amount == "10.00"
+    assert server.requests[0].body["currency"] == "USDC"
+    assert client.crypto.balance.retrieve({"currency": "USDC"}).available == "4.37"
+    assert server.requests[1].path == "/v1/crypto/balance?currency=USDC"
+    assert [b.currency for b in client.crypto.balances.list().data] == ["USDT", "USDC"]
+
+
+CONVERSION = {
+    "id": "c0a8f6a2-1111-4b7e-9a51-0f4a1e9a0001", "object": "conversion", "status": "PENDING", "reference": None,
+    "rate": "998.8299", "marketRate": "979.2450", "spreadPercent": "2.0000", "rateSource": "market",
+    "sourceAmountVes": "10000.00", "targetAmountUsdt": "10.01", "createdAt": "2026-10-03T00:00:00.000Z",
+    "completedAt": None, "canceledAt": None, "cancelReason": None,
+}
+
+
+def test_conversions_quote_convert_list_cancel(server: MockServer) -> None:
+    quote = {
+        "id": "q1", "object": "conversion_quote", "rate": "998.8299", "marketRate": "979.2450", "spreadPercent": "2.0000",
+        "rateSource": "market", "sourceAmountVes": "10000.00", "targetAmountUsdt": "10.01",
+        "expiresAt": "2026-10-03T00:01:00.000Z", "createdAt": "2026-10-03T00:00:00.000Z",
+    }
+    server.script([
+        Scripted(201, quote),
+        Scripted(201, CONVERSION),
+        Scripted(200, {"items": [CONVERSION], "nextCursor": None}),
+        Scripted(200, {**CONVERSION, "status": "CANCELED", "cancelReason": "canceled_by_tenant"}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    q = client.conversions.quotes.create({"sourceAmountVes": "10000.00"})
+    assert q.targetAmountUsdt == "10.01"
+    created = client.conversions.create({"quoteId": q.id}, idempotency_key="conv-1")
+    assert created.status == "PENDING"
+    assert server.requests[1].path == "/v1/conversions"
+    assert server.requests[1].headers["idempotency-key"] == "conv-1"
+    assert [c.id for c in client.conversions.list({"status": "PENDING"})] == [CONVERSION["id"]]
+    assert server.requests[2].path == "/v1/conversions?status=PENDING"
+    assert client.conversions.cancel(CONVERSION["id"]).status == "CANCELED"
+    assert server.requests[3].path == f"/v1/conversions/{CONVERSION['id']}/cancel"

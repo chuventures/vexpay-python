@@ -521,18 +521,25 @@ class AsyncWebhookEndpoints(AsyncAPIResource):
         return await self._request_model("Notifications_sendTest", m.NotificationTestResponseDto, options=options)
 
 
-# ── crypto (USDT) ─────────────────────────────────────────────────────────────
+# ── crypto (USDT, USDC) ───────────────────────────────────────────────────────
 
 
 class AsyncCryptoBalance(AsyncAPIResource):
-    """Your USDT balance (USDT settles in USDT, never converted to VES)."""
+    """One stablecoin balance (``currency``: USDT by default, or USDC). Never converted to VES."""
 
-    async def retrieve(self, **options: Unpack[RequestOptions]) -> m.CryptoBalanceDto:
-        return await self._request_model("Crypto_getBalance", m.CryptoBalanceDto, options=options)
+    async def retrieve(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> m.CryptoBalanceDto:
+        return await self._request_model("Crypto_getBalance", m.CryptoBalanceDto, query=params or {}, options=options)
+
+
+class AsyncCryptoBalances(AsyncAPIResource):
+    """Every stablecoin balance (USDT and USDC)."""
+
+    async def list(self, **options: Unpack[RequestOptions]) -> m.CryptoBalancesDto:
+        return await self._request_model("Crypto_getBalances", m.CryptoBalancesDto, options=options)
 
 
 class AsyncDepositAddresses(AsyncAPIResource):
-    """Static USDT deposit addresses per customer and network."""
+    """Static deposit addresses per customer, stablecoin (``currency``) and network."""
 
     async def create(
         self, params: Union[m.CreateDepositAddressDto, Params], **options: Unpack[RequestOptions]
@@ -542,7 +549,7 @@ class AsyncDepositAddresses(AsyncAPIResource):
 
 
 class AsyncCryptoNetworks(AsyncAPIResource):
-    """Enabled USDT networks with the payout fee and availability for an amount."""
+    """Enabled networks for one stablecoin (``currency``) with the payout fee and availability for an amount."""
 
     async def list(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> list[m.CryptoNetworkDto]:
         raw = await self._request_json("Crypto_listNetworks", query=params or {}, options=options)
@@ -550,7 +557,7 @@ class AsyncCryptoNetworks(AsyncAPIResource):
 
 
 class AsyncCryptoPayouts(AsyncAPIResource):
-    """USDT payouts to external addresses. ``idempotencyKey`` (in the body) makes retries safe."""
+    """Stablecoin payouts (``currency``: USDT or USDC). ``idempotencyKey`` (in the body) makes retries safe."""
 
     async def create(
         self, params: Union[m.CreateCryptoPayoutDto, Params], **options: Unpack[RequestOptions]
@@ -562,11 +569,57 @@ class AsyncCryptoPayouts(AsyncAPIResource):
 
 
 class AsyncCrypto(AsyncAPIResource):
-    """USDT: deposit addresses, balance, networks and payouts."""
+    """Stablecoins (USDT, USDC): deposit addresses, balances, networks and payouts."""
 
     def __init__(self, http: Any) -> None:
         super().__init__(http)
         self.balance = AsyncCryptoBalance(self._http)
+        self.balances = AsyncCryptoBalances(self._http)
         self.deposit_addresses = AsyncDepositAddresses(self._http)
         self.networks = AsyncCryptoNetworks(self._http)
         self.payouts = AsyncCryptoPayouts(self._http)
+
+class AsyncConversionQuotes(AsyncAPIResource):
+    """A rate for converting VES to USDT, locked for 60 seconds."""
+
+    async def create(
+        self, params: Union[m.CreateConversionQuoteDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.ConversionQuoteDto:
+        """Send ``sourceAmountVes`` (VES to spend) or ``targetAmountUsdt`` (USDT to receive) — exactly one."""
+        return await self._request_model("Conversions_createQuote", m.ConversionQuoteDto, body=params, options=options)
+
+
+class AsyncConversions(AsyncAPIResource):
+    """Convert available VES into your USDT balance (enabled per account).
+
+    Accepting a quote debits the VES at once; the conversion is ``PENDING`` until VEXPay delivers the
+    USDT (``conversion.completed``).
+    """
+
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.quotes = AsyncConversionQuotes(self._http)
+
+    async def create(
+        self, params: Union[m.CreateConversionDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.ConversionDto:
+        """Accept a quote (``quoteId``). Pass ``idempotency_key`` to retry safely."""
+        return await self._request_model("Conversions_create", m.ConversionDto, body=params, options=options)
+
+    async def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.ConversionDto:
+        return await self._request_model("Conversions_get", m.ConversionDto, path={"id": id}, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> AsyncPage[m.ConversionListDto, m.ConversionDto]:
+        query = dict(params or {})
+        return AsyncPage(
+            lambda cursor: self._request_model(
+                "Conversions_list", m.ConversionListDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    async def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.ConversionDto:
+        """Cancel a ``PENDING`` conversion; the VES returns to your available balance."""
+        return await self._request_model("Conversions_cancel", m.ConversionDto, path={"id": id}, options=options)

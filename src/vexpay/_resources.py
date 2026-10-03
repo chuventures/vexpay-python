@@ -522,18 +522,25 @@ class WebhookEndpoints(SyncAPIResource):
         return self._request_model("Notifications_sendTest", m.NotificationTestResponseDto, options=options)
 
 
-# ── crypto (USDT) ─────────────────────────────────────────────────────────────
+# ── crypto (USDT, USDC) ───────────────────────────────────────────────────────
 
 
 class CryptoBalance(SyncAPIResource):
-    """Your USDT balance (USDT settles in USDT, never converted to VES)."""
+    """One stablecoin balance (``currency``: USDT by default, or USDC). Never converted to VES."""
 
-    def retrieve(self, **options: Unpack[RequestOptions]) -> m.CryptoBalanceDto:
-        return self._request_model("Crypto_getBalance", m.CryptoBalanceDto, options=options)
+    def retrieve(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> m.CryptoBalanceDto:
+        return self._request_model("Crypto_getBalance", m.CryptoBalanceDto, query=params or {}, options=options)
+
+
+class CryptoBalances(SyncAPIResource):
+    """Every stablecoin balance (USDT and USDC)."""
+
+    def list(self, **options: Unpack[RequestOptions]) -> m.CryptoBalancesDto:
+        return self._request_model("Crypto_getBalances", m.CryptoBalancesDto, options=options)
 
 
 class DepositAddresses(SyncAPIResource):
-    """Static USDT deposit addresses per customer and network."""
+    """Static deposit addresses per customer, stablecoin (``currency``) and network."""
 
     def create(
         self, params: Union[m.CreateDepositAddressDto, Params], **options: Unpack[RequestOptions]
@@ -543,7 +550,7 @@ class DepositAddresses(SyncAPIResource):
 
 
 class CryptoNetworks(SyncAPIResource):
-    """Enabled USDT networks with the payout fee and availability for an amount."""
+    """Enabled networks for one stablecoin (``currency``) with the payout fee and availability for an amount."""
 
     def list(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> list[m.CryptoNetworkDto]:
         raw = self._request_json("Crypto_listNetworks", query=params or {}, options=options)
@@ -551,7 +558,7 @@ class CryptoNetworks(SyncAPIResource):
 
 
 class CryptoPayouts(SyncAPIResource):
-    """USDT payouts to external addresses. ``idempotencyKey`` (in the body) makes retries safe."""
+    """Stablecoin payouts (``currency``: USDT or USDC). ``idempotencyKey`` (in the body) makes retries safe."""
 
     def create(
         self, params: Union[m.CreateCryptoPayoutDto, Params], **options: Unpack[RequestOptions]
@@ -563,11 +570,57 @@ class CryptoPayouts(SyncAPIResource):
 
 
 class Crypto(SyncAPIResource):
-    """USDT: deposit addresses, balance, networks and payouts."""
+    """Stablecoins (USDT, USDC): deposit addresses, balances, networks and payouts."""
 
     def __init__(self, http: Any) -> None:
         super().__init__(http)
         self.balance = CryptoBalance(self._http)
+        self.balances = CryptoBalances(self._http)
         self.deposit_addresses = DepositAddresses(self._http)
         self.networks = CryptoNetworks(self._http)
         self.payouts = CryptoPayouts(self._http)
+
+class ConversionQuotes(SyncAPIResource):
+    """A rate for converting VES to USDT, locked for 60 seconds."""
+
+    def create(
+        self, params: Union[m.CreateConversionQuoteDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.ConversionQuoteDto:
+        """Send ``sourceAmountVes`` (VES to spend) or ``targetAmountUsdt`` (USDT to receive) — exactly one."""
+        return self._request_model("Conversions_createQuote", m.ConversionQuoteDto, body=params, options=options)
+
+
+class Conversions(SyncAPIResource):
+    """Convert available VES into your USDT balance (enabled per account).
+
+    Accepting a quote debits the VES at once; the conversion is ``PENDING`` until VEXPay delivers the
+    USDT (``conversion.completed``).
+    """
+
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.quotes = ConversionQuotes(self._http)
+
+    def create(
+        self, params: Union[m.CreateConversionDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.ConversionDto:
+        """Accept a quote (``quoteId``). Pass ``idempotency_key`` to retry safely."""
+        return self._request_model("Conversions_create", m.ConversionDto, body=params, options=options)
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.ConversionDto:
+        return self._request_model("Conversions_get", m.ConversionDto, path={"id": id}, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.ConversionListDto, m.ConversionDto]:
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Conversions_list", m.ConversionListDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.ConversionDto:
+        """Cancel a ``PENDING`` conversion; the VES returns to your available balance."""
+        return self._request_model("Conversions_cancel", m.ConversionDto, path={"id": id}, options=options)
