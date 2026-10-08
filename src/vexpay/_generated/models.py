@@ -36,6 +36,10 @@ class PlatformBalanceDto(BaseModel):
     """
     Net VES spent on VES→USDT conversions.
     """
+    chargebackFeesVes: str = Field(..., examples=["0.00"])
+    """
+    Net card chargeback fees charged (fees minus fees returned on won disputes).
+    """
     reserveVes: str = Field(..., examples=["100.00"])
     ledgerNetVes: str = Field(..., examples=["8650.00"])
     availableVes: str = Field(..., examples=["8650.00"])
@@ -53,6 +57,54 @@ class PlatformBalanceDto(BaseModel):
     feeFixedUsd: str = Field(..., examples=["0.00"])
 
 
+class BalanceTransactionDto(BaseModel):
+    id: str
+    """
+    Stable id of the movement; never changes or disappears.
+    """
+    type: Literal[
+        "payment",
+        "fee",
+        "payment_reversal",
+        "fee_reversal",
+        "payout",
+        "payout_reversal",
+        "chargeback",
+        "chargeback_fee",
+        "chargeback_reversal",
+        "adjustment",
+        "seller_transfer",
+        "seller_transfer_reversal",
+        "conversion",
+        "conversion_reversal",
+    ] = Field(..., examples=["chargeback"])
+    amountVes: str = Field(..., examples=["-4000.00"])
+    """
+    Signed VES amount (negative = money out of your balance).
+    """
+    paymentId: Optional[str] = None
+    payoutId: Optional[str] = None
+    chargebackId: Optional[str] = None
+    """
+    Present on chargeback movements.
+    """
+    merchantId: Optional[str] = None
+    externalRef: Optional[str] = Field(None, examples=["order-1042"])
+    """
+    externalRef of the linked payment or payout.
+    """
+    description: str = Field(..., examples=["Card chargeback (fraud)"])
+    createdAt: AwareDatetime
+
+
+class BalanceTransactionListDto(BaseModel):
+    items: list[BalanceTransactionDto]
+    nextCursor: Optional[str] = Field(...)
+    """
+    Pass as `cursor` to get the next (older) page; null on the last page.
+    """
+
+
 class CreateWebhookDto(BaseModel):
     url: AnyUrl = Field(..., examples=["https://merchant.example.com/webhooks/vexpay"])
     secret: Optional[str] = Field(None, examples=["replace-with-a-long-random-secret"])
@@ -66,6 +118,8 @@ class CreateWebhookDto(BaseModel):
             "payment.failed",
             "payment.canceled",
             "payment.reversed",
+            "payment.chargeback",
+            "payment.chargeback_closed",
             "merchant.verified",
             "merchant.rejected",
             "merchant.deactivated",
@@ -103,6 +157,8 @@ class WebhookEndpointDto(BaseModel):
             "payment.failed",
             "payment.canceled",
             "payment.reversed",
+            "payment.chargeback",
+            "payment.chargeback_closed",
             "merchant.verified",
             "merchant.rejected",
             "merchant.deactivated",
@@ -147,6 +203,8 @@ class UpdateWebhookDto(BaseModel):
                 "payment.failed",
                 "payment.canceled",
                 "payment.reversed",
+                "payment.chargeback",
+                "payment.chargeback_closed",
                 "merchant.verified",
                 "merchant.rejected",
                 "merchant.deactivated",

@@ -133,7 +133,7 @@ Responses and events include `currency`, `amount` and `fee` for both coins (`amo
 
 ## Convert VES to USDT
 
-Turn available VES into your USDT balance. A quote locks the rate (market USDT/VES rate plus your spread) for 60 seconds; accepting it debits the VES at once and returns a `PENDING` conversion. VEXPay then delivers the USDT and sends `conversion.completed` (or `conversion.canceled`, with the VES returned). Conversions must be enabled on your account — otherwise the calls fail with `conversions_not_enabled` (403). In test mode they complete immediately.
+Turn available VES into your USDT balance. A quote locks the rate (market USDT/VES rate plus your spread) for 60 seconds; accepting it debits the VES at once and returns a `PENDING` conversion. VEXPay then delivers the USDT and sends `conversion.completed` (or `conversion.canceled`, with the VES returned). Conversions are on for every account that has USDT enabled — otherwise the calls fail with `conversions_not_enabled` (403). In test mode they complete immediately.
 
 ```python
 quote = vexpay.conversions.quotes.create({"sourceAmountVes": "10000.00"})  # or {"targetAmountUsdt": "50.00"}
@@ -299,6 +299,7 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `banks` | `list` |
 | `quotes` | `retrieve` |
 | `balance` | `retrieve` |
+| `balance.transactions` | `list` (auto-paginating; every movement in your VES balance — reconcile with `ledgerNetVes`) |
 | `payments` | `retrieve`, `retrieve_by_ref`, `reverse` |
 | `payments.c2p` | `request`, `execute` |
 | `payments.vpos` | `create` |

@@ -448,7 +448,26 @@ class AsyncQuotes(AsyncAPIResource):
         return await self._request_model("Payments_getQuote", m.QuoteResponseDto, query=params, options=options)
 
 
+class AsyncBalanceTransactions(AsyncAPIResource):
+    """Every movement in your VES balance, newest first. The amounts sum to ``ledger_net_ves``."""
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> AsyncPage[m.BalanceTransactionListDto, m.BalanceTransactionDto]:
+        query = dict(params or {})
+        return AsyncPage(
+            lambda cursor: self._request_model(
+                "Balance_listTransactions", m.BalanceTransactionListDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+
 class AsyncBalance(AsyncAPIResource):
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.transactions = AsyncBalanceTransactions(self._http)
+
     async def retrieve(self, **options: Unpack[RequestOptions]) -> m.PlatformBalanceDto:
         return await self._request_model("Balance_getBalance", m.PlatformBalanceDto, options=options)
 

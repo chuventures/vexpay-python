@@ -5,6 +5,7 @@ from typing import Optional
 
 ROUTES: dict[str, tuple[str, str]] = {
     "Balance_getBalance": ("GET", "/v1/balance"),
+    "Balance_listTransactions": ("GET", "/v1/balance/transactions"),
     "CheckoutSessions_create": ("POST", "/v1/checkout/sessions"),
     "CheckoutSessions_retrieve": ("GET", "/v1/checkout/sessions/{id}"),
     "Conversions_cancel": ("POST", "/v1/conversions/{id}/cancel"),
@@ -84,6 +85,7 @@ ROUTES: dict[str, tuple[str, str]] = {
 #: Success response schema per operation (None: inline or empty body).
 RESPONSE_MODELS: dict[str, Optional[str]] = {
     "Balance_getBalance": "PlatformBalanceDto",
+    "Balance_listTransactions": "BalanceTransactionListDto",
     "CheckoutSessions_create": "CheckoutSessionResponseDto",
     "CheckoutSessions_retrieve": "CheckoutSessionResponseDto",
     "Conversions_cancel": "ConversionDto",

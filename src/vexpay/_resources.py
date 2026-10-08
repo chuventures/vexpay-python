@@ -449,7 +449,26 @@ class Quotes(SyncAPIResource):
         return self._request_model("Payments_getQuote", m.QuoteResponseDto, query=params, options=options)
 
 
+class BalanceTransactions(SyncAPIResource):
+    """Every movement in your VES balance, newest first. The amounts sum to ``ledger_net_ves``."""
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.BalanceTransactionListDto, m.BalanceTransactionDto]:
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Balance_listTransactions", m.BalanceTransactionListDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+
 class Balance(SyncAPIResource):
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.transactions = BalanceTransactions(self._http)
+
     def retrieve(self, **options: Unpack[RequestOptions]) -> m.PlatformBalanceDto:
         return self._request_model("Balance_getBalance", m.PlatformBalanceDto, options=options)
 
