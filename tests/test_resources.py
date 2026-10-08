@@ -264,3 +264,39 @@ def test_conversions_quote_convert_list_cancel(server: MockServer) -> None:
     assert server.requests[2].path == "/v1/conversions?status=PENDING"
     assert client.conversions.cancel(CONVERSION["id"]).status == "CANCELED"
     assert server.requests[3].path == f"/v1/conversions/{CONVERSION['id']}/cancel"
+
+
+COP_PAYMENT = {
+    "id": "5e0c7b1a-2222-4b7e-9a51-0f4a1e9a0002", "status": "pending", "method": "COP", "channel": "daviplata",
+    "amountCop": 50000, "metadata": {}, "createdAt": "2026-10-08T00:00:00.000Z", "expiresAt": "2026-10-08T00:05:00.000Z",
+}
+
+
+def test_cop_payment_otp_cancel_refund_and_balance(server: MockServer) -> None:
+    server.script([
+        Scripted(201, {**COP_PAYMENT, "next": {"type": "submit_otp"}}),
+        Scripted(200, {**COP_PAYMENT, "status": "completed", "feeCop": 1750}),
+        Scripted(200, COP_PAYMENT),
+        Scripted(200, {**COP_PAYMENT, "status": "canceled"}),
+        Scripted(200, {**COP_PAYMENT, "status": "refunded"}),
+        Scripted(200, {"availableCop": 96500, "pendingPayoutCop": 0, "asOf": "2026-10-08T00:00:00.000Z"}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    buyer = {"email": "juan@example.com", "phone": "3001234567", "documentType": "CC", "documentNumber": "1234567890"}
+    payment = client.cop.payments.create(
+        {"amountCop": 50000, "channel": "daviplata", "buyer": buyer}, idempotency_key="cop-1"
+    )
+    assert payment.next is not None and payment.next.type == "submit_otp"
+    assert server.requests[0].path == "/v1/cop/payments"
+    assert server.requests[0].headers["idempotency-key"] == "cop-1"
+    assert server.requests[0].body["buyer"]["documentType"] == "CC"
+    assert client.cop.payments.submit_otp(payment.id, {"otp": "123456"}).status == "completed"
+    assert server.requests[1].path == f"/v1/cop/payments/{COP_PAYMENT['id']}/otp"
+    assert server.requests[1].body == {"otp": "123456"}
+    assert client.cop.payments.retrieve(payment.id).channel == "daviplata"
+    assert client.cop.payments.cancel(payment.id).status == "canceled"
+    assert client.cop.payments.refund(payment.id).status == "refunded"
+    assert server.requests[4].path == f"/v1/cop/payments/{COP_PAYMENT['id']}/refund"
+    assert client.cop.balance.retrieve().availableCop == 96500
+    assert server.requests[5].path == "/v1/cop/balance"
+

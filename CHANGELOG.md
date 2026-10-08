@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Add `cop` (sync and async) — Colombian pesos through Bre-B, Nequi and Daviplata: `cop.payments.create()`, `retrieve()`, `submit_otp()`, `cancel()`, `refund()` and `cop.balance.retrieve()`. COP must be enabled on your account.
+
 ## 0.5.0
 
 - Checkout sessions accept `"methods": ["cop"]`: Colombian pesos through Bre-B, Nequi and Daviplata on the hosted checkout, priced from `amountUsd` at VEX Pay's USDT/COP rate. `cop` is offered by default when COP is enabled on your account. COP payment reads and `payment.*` webhooks for checkout payments add `amountUsd` and `copRate`.

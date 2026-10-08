@@ -1099,6 +1099,123 @@ class CryptoPayoutDto(BaseModel):
     completedAt: Optional[AwareDatetime] = None
 
 
+class CopBuyerDto(BaseModel):
+    firstName: Optional[str] = Field(None, examples=["Juan"], max_length=50)
+    lastName: Optional[str] = Field(None, examples=["Pérez"], max_length=50)
+    email: Optional[str] = Field(None, examples=["juan@example.com"])
+    """
+    Required for Nequi and Daviplata.
+    """
+    phone: Optional[str] = Field(None, examples=["3001234567"])
+    """
+    Colombian mobile number (10 digits starting with 3, with or without +57). Required for Nequi (it receives the push) and Daviplata.
+    """
+    documentType: Optional[Literal["CC", "CE", "TI", "NIT", "PP"]] = Field(
+        None, examples=["CC"]
+    )
+    """
+    Required for Nequi and Daviplata. Daviplata accepts CC, CE and TI only.
+    """
+    documentNumber: Optional[str] = Field(None, examples=["1234567890"])
+    """
+    National document number. Required for Nequi and Daviplata.
+    """
+
+
+class CreateCopPaymentDto(BaseModel):
+    amountCop: float = Field(..., examples=[100000])
+    """
+    Amount in whole Colombian pesos.
+    """
+    channel: Literal["breb", "nequi", "daviplata"] = Field(..., examples=["breb"])
+    """
+    `breb`: QR code / transfer key the buyer pays from any Colombian bank app. `nequi`: push to the buyer's Nequi app. `daviplata`: SMS code the buyer reads to you.
+    """
+    description: Optional[str] = Field(None, examples=["Order 1042"], max_length=255)
+    """
+    Shown to the buyer.
+    """
+    reference: Optional[str] = Field(None, examples=["order-1042"], max_length=64)
+    """
+    Your reference, echoed in reads and webhooks.
+    """
+    metadata: Optional[dict[str, str]] = Field(None, examples=[{"orderId": "1042"}])
+    """
+    Up to 20 string key/value pairs (keys ≤ 40 chars, values ≤ 500 chars).
+    """
+    buyer: Optional[CopBuyerDto] = None
+    """
+    Required for `nequi` and `daviplata`; optional for `breb`.
+    """
+
+
+class CopNextActionDto(BaseModel):
+    type: Literal["show_qr", "approve_in_app", "submit_otp"]
+    qrPngBase64: Optional[str] = None
+    """
+    Bre-B: base64 PNG of the payment QR. Returned only when the payment is created.
+    """
+    transferKey: Optional[str] = None
+    """
+    Bre-B: transfer key the buyer can enter instead of scanning.
+    """
+    phoneMasked: Optional[str] = Field(None, examples=["****567"])
+    """
+    Nequi: masked phone that received the push.
+    """
+
+
+class CopPaymentDto(BaseModel):
+    id: str
+    status: Literal["pending", "completed", "failed", "canceled", "refunded"]
+    method: Literal["COP"]
+    channel: Literal["breb", "nequi", "daviplata"]
+    amountCop: float = Field(..., examples=[100000])
+    feeCop: Optional[float] = Field(None, examples=[3500])
+    """
+    Present once completed.
+    """
+    amountUsd: Optional[str] = Field(None, examples=["5.00"])
+    """
+    Hosted checkout payments only: the USD price the peso amount was computed from.
+    """
+    copRate: Optional[str] = Field(None, examples=["3316.382375"])
+    """
+    Hosted checkout payments only: COP per USD the buyer was charged at.
+    """
+    reference: Optional[str] = Field(None, examples=["order-1042"])
+    metadata: dict[str, str]
+    failureCode: Optional[
+        Literal["expired", "rejected", "processor_error", "processor_unknown"]
+    ] = None
+    expiresAt: Optional[AwareDatetime] = None
+    createdAt: AwareDatetime
+    completedAt: Optional[AwareDatetime] = None
+    next: Optional[CopNextActionDto] = None
+    """
+    What the buyer must do next. Returned when the payment is created.
+    """
+
+
+class SubmitCopOtpDto(BaseModel):
+    otp: str = Field(..., examples=["123456"])
+    """
+    The code the buyer received by SMS.
+    """
+
+
+class CopBalanceDto(BaseModel):
+    availableCop: float = Field(..., examples=[96500])
+    """
+    Whole pesos available for payout.
+    """
+    pendingPayoutCop: float = Field(..., examples=[0])
+    """
+    Whole pesos reserved by payouts in progress.
+    """
+    asOf: AwareDatetime
+
+
 class CreateConversionQuoteDto(BaseModel):
     sourceAmountVes: Optional[str] = Field(None, examples=["10000.00"])
     """

@@ -599,6 +599,57 @@ class Crypto(SyncAPIResource):
         self.networks = CryptoNetworks(self._http)
         self.payouts = CryptoPayouts(self._http)
 
+class CopPayments(SyncAPIResource):
+    """Colombian peso payments: Bre-B (QR / transfer key), Nequi (push approval) or Daviplata (SMS code).
+
+    Payments complete asynchronously — listen for ``payment.completed`` / ``payment.failed``.
+    COP must be enabled on your account (403 ``method_not_allowed`` otherwise).
+    """
+
+    def create(
+        self, params: Union[m.CreateCopPaymentDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.CopPaymentDto:
+        """Create a payment in whole pesos; ``buyer`` is required for ``nequi`` and ``daviplata``.
+
+        ``next.type`` says what the buyer does: ``show_qr``, ``approve_in_app`` or ``submit_otp``.
+        Pass ``idempotency_key`` to retry safely.
+        """
+        return self._request_model("CopPayments_create", m.CopPaymentDto, body=params, options=options)
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.CopPaymentDto:
+        return self._request_model("CopPayments_get", m.CopPaymentDto, path={"id": id}, options=options)
+
+    def submit_otp(
+        self, id: str, params: Union[m.SubmitCopOtpDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.CopPaymentDto:
+        """Daviplata: submit the code the buyer received by SMS. A wrong code fails with ``invalid_otp``."""
+        return self._request_model("CopPayments_submitOtp", m.CopPaymentDto, path={"id": id}, body=params, options=options)
+
+    def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.CopPaymentDto:
+        """Cancel a pending payment."""
+        return self._request_model("CopPayments_cancel", m.CopPaymentDto, path={"id": id}, options=options)
+
+    def refund(self, id: str, **options: Unpack[RequestOptions]) -> m.CopPaymentDto:
+        """Full refund of a completed payment, within 96 hours."""
+        return self._request_model("CopPayments_refund", m.CopPaymentDto, path={"id": id}, options=options)
+
+
+class CopBalance(SyncAPIResource):
+    """Your COP balance, in whole pesos. Kept apart from VES and stablecoins."""
+
+    def retrieve(self, **options: Unpack[RequestOptions]) -> m.CopBalanceDto:
+        return self._request_model("CopPayments_balance", m.CopBalanceDto, options=options)
+
+
+class Cop(SyncAPIResource):
+    """Collect Colombian pesos (Bre-B, Nequi, Daviplata)."""
+
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.payments = CopPayments(self._http)
+        self.balance = CopBalance(self._http)
+
+
 class ConversionQuotes(SyncAPIResource):
     """A rate for converting VES to USDT, locked for 60 seconds."""
 
