@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+- Checkout sessions accept `"methods": ["cop"]`: Colombian pesos through Bre-B, Nequi and Daviplata on the hosted checkout, priced from `amountUsd` at VEX Pay's USDT/COP rate. `cop` is offered by default when COP is enabled on your account. COP payment reads and `payment.*` webhooks for checkout payments add `amountUsd` and `copRate`.
+
 ## 0.4.0
 
 - Add `balance.transactions.list()` (sync and async): every movement in your VES balance (payments, fees, payouts, reversals, card chargebacks, adjustments, seller transfers, conversions), newest first and auto-paginating. The amounts sum to `ledgerNetVes` from `balance.retrieve()`, so your ledger can reconcile automatically.

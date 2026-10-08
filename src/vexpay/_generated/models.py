@@ -1744,9 +1744,9 @@ class CreateCheckoutSessionDto(BaseModel):
     """
     Origins allowed to embed this checkout with @vexpay/js. https only; http://localhost:* allowed for test tenants. Omit to allow the hosted URL only.
     """
-    methods: Optional[list[Literal["c2p", "vpos", "usdt", "usdc"]]] = None
+    methods: Optional[list[Literal["c2p", "vpos", "usdt", "usdc", "cop"]]] = None
     """
-    Payment methods offered. Defaults to every method your account can accept.
+    Payment methods offered. Defaults to every method your account can accept. `cop` (Colombian pesos: Bre-B, Nequi, Daviplata) needs the COP method on your account.
     """
     metadata: Optional[dict[str, str]] = Field(None, examples=[{"orderId": "1042"}])
     """
@@ -1771,7 +1771,7 @@ class CheckoutSessionResponseDto(BaseModel):
     reference: Optional[str] = None
     metadata: dict[str, str]
     allowedOrigins: list[str]
-    methods: list[Literal["c2p", "vpos", "usdt", "usdc"]]
+    methods: list[Literal["c2p", "vpos", "usdt", "usdc", "cop"]]
     successUrl: Optional[str] = None
     cancelUrl: Optional[str] = None
     paymentId: Optional[str] = None
