@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+- Conversions accept Colombian pesos (sync and async): `conversions.quotes.create({"sourceCurrency": "COP", "sourceAmount": "1000000"})` (or `targetAmountUsdt`) converts COP to USDT at the market rate plus your COP spread. Quotes and conversions add `sourceCurrency`, `sourceAmount`, `origin` (`api` | `auto`) and `paymentId`; `sourceAmountVes` is `None` on COP conversions. `conversions.list()` filters by `sourceCurrency`.
+- Add `conversions.settings.retrieve()` / `update()` — read your spreads, minimum and caps, and turn on auto-convert (`autoConvert.COP.percent`).
+- New webhook event `conversion.created`.
+
 ## 0.6.0
 
 - Add `cop` (sync and async) — Colombian pesos through Bre-B, Nequi and Daviplata: `cop.payments.create()`, `retrieve()`, `submit_otp()`, `cancel()`, `refund()` and `cop.balance.retrieve()`. COP must be enabled on your account.

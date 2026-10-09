@@ -236,7 +236,8 @@ def test_usdc_payout_and_balances(server: MockServer) -> None:
 CONVERSION = {
     "id": "c0a8f6a2-1111-4b7e-9a51-0f4a1e9a0001", "object": "conversion", "status": "PENDING", "reference": None,
     "rate": "998.8299", "marketRate": "979.2450", "spreadPercent": "2.0000", "rateSource": "market",
-    "sourceAmountVes": "10000.00", "targetAmountUsdt": "10.01", "createdAt": "2026-10-03T00:00:00.000Z",
+    "sourceCurrency": "VES", "sourceAmount": "10000.00", "sourceAmountVes": "10000.00", "targetAmountUsdt": "10.01",
+    "origin": "api", "paymentId": None, "createdAt": "2026-10-03T00:00:00.000Z",
     "completedAt": None, "canceledAt": None, "cancelReason": None,
 }
 
@@ -244,8 +245,8 @@ CONVERSION = {
 def test_conversions_quote_convert_list_cancel(server: MockServer) -> None:
     quote = {
         "id": "q1", "object": "conversion_quote", "rate": "998.8299", "marketRate": "979.2450", "spreadPercent": "2.0000",
-        "rateSource": "market", "sourceAmountVes": "10000.00", "targetAmountUsdt": "10.01",
-        "expiresAt": "2026-10-03T00:01:00.000Z", "createdAt": "2026-10-03T00:00:00.000Z",
+        "rateSource": "market", "sourceCurrency": "VES", "sourceAmount": "10000.00", "sourceAmountVes": "10000.00",
+        "targetAmountUsdt": "10.01", "expiresAt": "2026-10-03T00:01:00.000Z", "createdAt": "2026-10-03T00:00:00.000Z",
     }
     server.script([
         Scripted(201, quote),
@@ -265,6 +266,29 @@ def test_conversions_quote_convert_list_cancel(server: MockServer) -> None:
     assert client.conversions.cancel(CONVERSION["id"]).status == "CANCELED"
     assert server.requests[3].path == f"/v1/conversions/{CONVERSION['id']}/cancel"
 
+
+
+def test_conversions_cop_quote_and_settings(server: MockServer) -> None:
+    cop_quote = {
+        "id": "q2", "object": "conversion_quote", "rate": "4037.6000", "marketRate": "3920.0000", "spreadPercent": "3.0000",
+        "rateSource": "market", "sourceCurrency": "COP", "sourceAmount": "1000000", "sourceAmountVes": None,
+        "targetAmountUsdt": "247.67", "expiresAt": "2026-10-09T00:01:00.000Z", "createdAt": "2026-10-09T00:00:00.000Z",
+    }
+    settings = {
+        "object": "conversion_settings", "enabled": True, "sourceCurrencies": {"VES": True, "COP": True},
+        "spreadPercent": {"VES": "3.0000", "COP": "3.0000"}, "minimumUsdt": "10.00",
+        "dailyMax": {"VES": None, "COP": None}, "autoConvert": {"COP": {"percent": 50}},
+    }
+    server.script([Scripted(201, cop_quote), Scripted(200, settings), Scripted(200, settings)])
+    client = VexPay("k", base_url=server.url)
+    q = client.conversions.quotes.create({"sourceCurrency": "COP", "sourceAmount": "1000000"})
+    assert q.sourceAmount == "1000000" and q.sourceAmountVes is None
+    assert server.requests[0].body == {"sourceCurrency": "COP", "sourceAmount": "1000000"}
+    assert client.conversions.settings.retrieve().autoConvert.COP.percent == 50
+    assert server.requests[1].path == "/v1/conversions/settings"
+    client.conversions.settings.update({"autoConvert": {"COP": {"percent": 50}}})
+    assert server.requests[2].method == "PATCH"
+    assert server.requests[2].body == {"autoConvert": {"COP": {"percent": 50}}}
 
 COP_PAYMENT = {
     "id": "5e0c7b1a-2222-4b7e-9a51-0f4a1e9a0002", "status": "pending", "method": "COP", "channel": "daviplata",

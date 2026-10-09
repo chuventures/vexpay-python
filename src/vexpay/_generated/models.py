@@ -134,6 +134,7 @@ class CreateWebhookDto(BaseModel):
             "merchant.wallet_credit",
             "payout.completed",
             "payout.failed",
+            "conversion.created",
             "conversion.completed",
             "conversion.canceled",
             "tenant.status_changed",
@@ -173,6 +174,7 @@ class WebhookEndpointDto(BaseModel):
             "merchant.wallet_credit",
             "payout.completed",
             "payout.failed",
+            "conversion.created",
             "conversion.completed",
             "conversion.canceled",
             "tenant.status_changed",
@@ -219,6 +221,7 @@ class UpdateWebhookDto(BaseModel):
                 "merchant.wallet_credit",
                 "payout.completed",
                 "payout.failed",
+                "conversion.created",
                 "conversion.completed",
                 "conversion.canceled",
                 "tenant.status_changed",
@@ -1216,14 +1219,80 @@ class CopBalanceDto(BaseModel):
     asOf: AwareDatetime
 
 
+class CurrencyFlagsDto(BaseModel):
+    VES: bool
+    COP: bool
+
+
+class CurrencyAmountsDto(BaseModel):
+    VES: str = Field(..., examples=["3.0000"])
+    COP: str = Field(..., examples=["3.0000"])
+
+
+class CurrencyCapsDto(BaseModel):
+    VES: Optional[str] = Field(..., examples=[None])
+    """
+    Max VES per Caracas day; `null` = no cap.
+    """
+    COP: Optional[str] = Field(..., examples=["2000000"])
+    """
+    Max COP per Bogotá day; `null` = no cap.
+    """
+
+
+class AutoConvertPercentDto(BaseModel):
+    percent: int = Field(..., examples=[50], ge=0, le=100)
+    """
+    Whole number; 0 = off.
+    """
+
+
+class AutoConvertDto(BaseModel):
+    COP: AutoConvertPercentDto
+
+
+class ConversionSettingsDto(BaseModel):
+    object: str = Field(..., examples=["conversion_settings"])
+    enabled: bool
+    """
+    Conversions are enabled for your account.
+    """
+    sourceCurrencies: CurrencyFlagsDto
+    """
+    Which currencies you can convert from right now.
+    """
+    spreadPercent: CurrencyAmountsDto
+    """
+    Your spread per source currency, in percent.
+    """
+    minimumUsdt: str = Field(..., examples=["10.00"])
+    """
+    Smallest USDT amount a conversion may deliver.
+    """
+    dailyMax: CurrencyCapsDto
+    autoConvert: AutoConvertDto
+
+
+class UpdateConversionSettingsDto(BaseModel):
+    autoConvert: AutoConvertDto = Field(..., examples=[{"COP": {"percent": 50}}])
+
+
 class CreateConversionQuoteDto(BaseModel):
+    sourceCurrency: Literal["VES", "COP"] = "VES"
+    """
+    Currency you convert from. Defaults to `VES`.
+    """
+    sourceAmount: Optional[str] = Field(None, examples=["1000000"])
+    """
+    Amount of `sourceCurrency` to spend (VES: up to 2 decimals; COP: whole pesos). Send this or `targetAmountUsdt`, not both.
+    """
     sourceAmountVes: Optional[str] = Field(None, examples=["10000.00"])
     """
-    VES to spend. Send this or `targetAmountUsdt`, not both.
+    VES only: same as `sourceAmount` (kept for existing integrations).
     """
     targetAmountUsdt: Optional[str] = Field(None, examples=["50.00"])
     """
-    USDT to receive. Send this or `sourceAmountVes`, not both.
+    USDT to receive. Send this or `sourceAmount`, not both.
     """
 
 
@@ -1232,18 +1301,26 @@ class ConversionQuoteDto(BaseModel):
     object: str = Field(..., examples=["conversion_quote"])
     rate: str = Field(..., examples=["998.8299"])
     """
-    VES per 1 USDT you get: market rate plus your spread.
+    Units of `sourceCurrency` per 1 USDT you get: market rate plus your spread.
     """
     marketRate: str = Field(..., examples=["979.2450"])
     """
-    Market USDT/VES rate the quote is based on.
+    Market USDT rate (in `sourceCurrency`) the quote is based on.
     """
     spreadPercent: str = Field(..., examples=["2.0000"])
     """
     Your spread, in percent.
     """
     rateSource: Literal["market"] = Field(..., examples=["market"])
-    sourceAmountVes: str = Field(..., examples=["10000.00"])
+    sourceCurrency: Literal["VES", "COP"]
+    sourceAmount: str = Field(..., examples=["10000.00"])
+    """
+    Amount debited (VES to the cent, COP in whole pesos; rounded up).
+    """
+    sourceAmountVes: Optional[str] = Field(..., examples=["10000.00"])
+    """
+    VES quotes only; `null` for COP.
+    """
     targetAmountUsdt: str = Field(..., examples=["10.01"])
     """
     Rounded down to the cent.
@@ -1275,8 +1352,24 @@ class ConversionDto(BaseModel):
     marketRate: str = Field(..., examples=["979.2450"])
     spreadPercent: str = Field(..., examples=["2.0000"])
     rateSource: Literal["market"] = Field(..., examples=["market"])
-    sourceAmountVes: str = Field(..., examples=["10000.00"])
+    sourceCurrency: Literal["VES", "COP"]
+    sourceAmount: str = Field(..., examples=["10000.00"])
+    """
+    Amount debited (VES to the cent, COP in whole pesos).
+    """
+    sourceAmountVes: Optional[str] = Field(..., examples=["10000.00"])
+    """
+    VES conversions only; `null` for COP.
+    """
     targetAmountUsdt: str = Field(..., examples=["10.01"])
+    origin: Literal["api", "auto"]
+    """
+    `auto` when created by auto-convert from a pay-in.
+    """
+    paymentId: Optional[str] = Field(...)
+    """
+    The pay-in an auto-conversion came from; `null` otherwise.
+    """
     createdAt: str
     completedAt: Optional[str] = Field(...)
     canceledAt: Optional[str] = Field(...)

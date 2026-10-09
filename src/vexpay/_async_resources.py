@@ -650,25 +650,40 @@ class AsyncCop(AsyncAPIResource):
 
 
 class AsyncConversionQuotes(AsyncAPIResource):
-    """A rate for converting VES to USDT, locked for 60 seconds."""
+    """A rate for converting VES or COP to USDT, locked for 60 seconds."""
 
     async def create(
         self, params: Union[m.CreateConversionQuoteDto, Params], **options: Unpack[RequestOptions]
     ) -> m.ConversionQuoteDto:
-        """Send ``sourceAmountVes`` (VES to spend) or ``targetAmountUsdt`` (USDT to receive) — exactly one."""
+        """``sourceCurrency`` is ``"VES"`` (default) or ``"COP"``. Send ``sourceAmount`` (to spend; COP in whole
+        pesos) or ``targetAmountUsdt`` (USDT to receive) — exactly one. VES may still use ``sourceAmountVes``."""
         return await self._request_model("Conversions_createQuote", m.ConversionQuoteDto, body=params, options=options)
 
 
-class AsyncConversions(AsyncAPIResource):
-    """Convert available VES into your USDT balance (enabled per account).
+class AsyncConversionSettings(AsyncAPIResource):
+    """Your conversion spreads, minimum and caps, and COP auto-convert."""
 
-    Accepting a quote debits the VES at once; the conversion is ``PENDING`` until VEXPay delivers the
-    USDT (``conversion.completed``).
+    async def retrieve(self, **options: Unpack[RequestOptions]) -> m.ConversionSettingsDto:
+        return await self._request_model("ConversionSettings_get", m.ConversionSettingsDto, options=options)
+
+    async def update(
+        self, params: Union[m.UpdateConversionSettingsDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.ConversionSettingsDto:
+        """Only ``autoConvert.COP.percent`` (0–100, whole number; 0 = off) can be changed."""
+        return await self._request_model("ConversionSettings_update", m.ConversionSettingsDto, body=params, options=options)
+
+
+class AsyncConversions(AsyncAPIResource):
+    """Convert available VES or COP into your USDT balance (enabled per account).
+
+    Accepting a quote debits the source at once (``conversion.created``); the conversion is ``PENDING``
+    until VEXPay delivers the USDT (``conversion.completed``).
     """
 
     def __init__(self, http: Any) -> None:
         super().__init__(http)
         self.quotes = AsyncConversionQuotes(self._http)
+        self.settings = AsyncConversionSettings(self._http)
 
     async def create(
         self, params: Union[m.CreateConversionDto, Params], **options: Unpack[RequestOptions]
@@ -691,5 +706,5 @@ class AsyncConversions(AsyncAPIResource):
         )
 
     async def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.ConversionDto:
-        """Cancel a ``PENDING`` conversion; the VES returns to your available balance."""
+        """Cancel a ``PENDING`` conversion; the VES or COP returns to your available balance."""
         return await self._request_model("Conversions_cancel", m.ConversionDto, path={"id": id}, options=options)
