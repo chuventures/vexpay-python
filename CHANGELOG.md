@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+- Add `payments.methods()` — the bolívar methods your account can take now (`pago_movil`, `c2p`, `vpos`), with a `reason` when unavailable. Sync and async.
+- C2P accepts `vesAmount` on `payments.c2p.request()` and `execute()`: it locks the exact bolívars debited (USD derived at BCV); `usdAmount` is now optional. Executing an intent charges the bolívar amount stored on the intent; amounts sent on execute must match it.
+- Checkout sessions accept `"methods": ["pago_movil"]` (Pago Móvil the buyer sends from their bank app).
+
 ## 0.7.0
 
 - Conversions accept Colombian pesos (sync and async): `conversions.quotes.create({"sourceCurrency": "COP", "sourceAmount": "1000000"})` (or `targetAmountUsdt`) converts COP to USDT at the market rate plus your COP spread. Quotes and conversions add `sourceCurrency`, `sourceAmount`, `origin` (`api` | `auto`) and `paymentId`; `sourceAmountVes` is `None` on COP conversions. `conversions.list()` filters by `sourceCurrency`.

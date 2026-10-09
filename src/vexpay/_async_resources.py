@@ -147,6 +147,10 @@ class AsyncPayments(AsyncAPIResource):
         self.dispersals = AsyncDispersals(self._http)
         self.change = AsyncChange(self._http)
 
+    async def methods(self, **options: Unpack[RequestOptions]) -> m.PaymentMethodsResponseDto:
+        """Bolívar methods your account can take now (``pago_movil``, ``c2p``, ``vpos``), with a reason when unavailable."""
+        return await self._request_model("Payments_listPaymentMethods", m.PaymentMethodsResponseDto, options=options)
+
     async def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.PaymentReceiptDto:
         return await self._request_model("Payments_getPayment", m.PaymentReceiptDto, path={"id": id}, options=options)
 

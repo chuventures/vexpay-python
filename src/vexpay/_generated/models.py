@@ -1434,7 +1434,14 @@ class QuoteResponseDto(BaseModel):
 
 
 class C2pRequestDto(BaseModel):
-    usdAmount: float = Field(..., examples=[25], ge=0.01, le=100000.0)
+    usdAmount: Optional[float] = Field(None, examples=[25], ge=0.01, le=100000.0)
+    """
+    USD amount. Required unless vesAmount is set. When only usdAmount is set, VES is derived at the live BCV rate.
+    """
+    vesAmount: Optional[float] = Field(None, examples=[50], ge=0.01, le=100000000.0)
+    """
+    VES amount debited at the bank. When set, locks the bolívar charge and derives USD at BCV (it wins over usdAmount). The intent keeps this amount until it is executed.
+    """
     debtorId: str = Field(..., examples=["V12345678"])
     debtorCellPhone: str = Field(..., examples=["584121234567"])
     """
@@ -1519,7 +1526,14 @@ class C2pPaymentDto(BaseModel):
     """
     Pending intent returned by POST /v1/payments/c2p/request.
     """
-    usdAmount: float = Field(..., examples=[25], ge=0.01, le=100000.0)
+    usdAmount: Optional[float] = Field(None, examples=[25], ge=0.01, le=100000.0)
+    """
+    USD amount. Required unless vesAmount or intentId is set. When only usdAmount is set, VES is derived at the live BCV rate.
+    """
+    vesAmount: Optional[float] = Field(None, examples=[50], ge=0.01, le=100000000.0)
+    """
+    VES amount debited at the bank. When set, locks the bolívar charge and derives USD at BCV (it wins over usdAmount). With intentId the amount locked on the intent is charged; amounts sent here must match it (±0.01 Bs / ±$0.01).
+    """
     debtorId: str = Field(..., examples=["V12345678"])
     debtorCellPhone: str = Field(..., examples=["584121234567"])
     debtorBankCode: float = Field(..., examples=[102])
@@ -1642,6 +1656,33 @@ class VposPaymentDto(BaseModel):
     """
     Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
     """
+
+
+class PaymentMethodAvailabilityDto(BaseModel):
+    method: Literal["pago_movil", "c2p", "vpos"]
+    """
+    `pago_movil`: the customer sends a Pago Móvil (verify). `c2p`: bank debit with the customer's OTP. `vpos`: card.
+    """
+    available: bool
+    """
+    Whether your account can take this method right now.
+    """
+    reason: Optional[
+        Literal[
+            "not_enabled", "receiving_account_not_configured", "provider_not_configured"
+        ]
+    ] = None
+    """
+    Only when available is false. `not_enabled`: the method is not enabled on your account. `receiving_account_not_configured`: Pago Móvil receiving details are not set up yet. `provider_not_configured`: temporarily unavailable in this mode — contact support.
+    """
+
+
+class PaymentMethodsResponseDto(BaseModel):
+    livemode: bool
+    """
+    false for test keys.
+    """
+    methods: list[PaymentMethodAvailabilityDto]
 
 
 class PagoMovilReceivingAccountDto(BaseModel):
@@ -1954,9 +1995,11 @@ class CreateCheckoutSessionDto(BaseModel):
     """
     Origins allowed to embed this checkout with @vexpay/js. https only; http://localhost:* allowed for test tenants. Omit to allow the hosted URL only.
     """
-    methods: Optional[list[Literal["c2p", "vpos", "usdt", "usdc", "cop"]]] = None
+    methods: Optional[
+        list[Literal["c2p", "pago_movil", "vpos", "usdt", "usdc", "cop"]]
+    ] = None
     """
-    Payment methods offered. Defaults to every method your account can accept. `cop` (Colombian pesos: Bre-B, Nequi, Daviplata) needs the COP method on your account.
+    Payment methods offered. Defaults to every method your account can accept. `c2p` is the bank pull shown as Débito Inmediato; `pago_movil` is a Pago Móvil the buyer sends from their bank app (needs Pago Móvil enabled on your account). `cop` (Colombian pesos: Bre-B, Nequi, Daviplata) needs the COP method on your account.
     """
     metadata: Optional[dict[str, str]] = Field(None, examples=[{"orderId": "1042"}])
     """
@@ -1981,7 +2024,7 @@ class CheckoutSessionResponseDto(BaseModel):
     reference: Optional[str] = None
     metadata: dict[str, str]
     allowedOrigins: list[str]
-    methods: list[Literal["c2p", "vpos", "usdt", "usdc", "cop"]]
+    methods: list[Literal["c2p", "pago_movil", "vpos", "usdt", "usdc", "cop"]]
     successUrl: Optional[str] = None
     cancelUrl: Optional[str] = None
     paymentId: Optional[str] = None

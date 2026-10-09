@@ -148,6 +148,10 @@ class Payments(SyncAPIResource):
         self.dispersals = Dispersals(self._http)
         self.change = Change(self._http)
 
+    def methods(self, **options: Unpack[RequestOptions]) -> m.PaymentMethodsResponseDto:
+        """Bolívar methods your account can take now (``pago_movil``, ``c2p``, ``vpos``), with a reason when unavailable."""
+        return self._request_model("Payments_listPaymentMethods", m.PaymentMethodsResponseDto, options=options)
+
     def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.PaymentReceiptDto:
         return self._request_model("Payments_getPayment", m.PaymentReceiptDto, path={"id": id}, options=options)
 
