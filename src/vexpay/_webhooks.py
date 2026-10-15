@@ -37,6 +37,7 @@ WEBHOOK_EVENT_NAMES: tuple[str, ...] = (
     "conversion.created",
     "conversion.completed",
     "conversion.canceled",
+    "onward_payout.updated",
     "tenant.status_changed",
     "tenant.api_key.created",
     "tenant.api_key.rotated",
@@ -75,6 +76,9 @@ class PaymentWebhookData(BaseModel):
     usdAmount: Optional[float] = None
     vesAmount: Optional[float] = None
     bcvRate: Optional[float] = None
+    # Rate the payment was priced at (BCV, or the market rate for MARKET accounts).
+    rate: Optional[float] = None
+    rateSource: Optional[Literal["BCV", "MARKET"]] = None
     feeUsd: Optional[float] = None
     feeVes: Optional[float] = None
     netVes: Optional[float] = None

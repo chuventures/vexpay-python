@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+
+- Pay in bolívars, receive USDT (sync and async): `payments.pago_movil.verify()`, `payments.c2p.request()` and `payments.c2p.execute()` accept `onwardPayout: {"network", "address", "tag"?}`. Once the payment completes, its net VES is converted to USDT and sent to that wallet. Payment reads and `payment.*` webhooks carry `onwardPayout` (status `pending` | `converting` | `sending` | `completed` | `held` | `failed` | `canceled`, with `conversionId`, `payoutId`, `amountUsdt`, `feeUsdt`, `txHash`, `reason`). New webhook event `onward_payout.updated`.
+- Quotes and payment receipts add `rate` and `rateSource` (`BCV` | `MARKET`): the Bolívar rate the amount was priced at, per your account's rate setting.
+- VPOS payments accept an optional `beneficiary` (who the funds are for when it is not a merchant; shown to ops only).
+
 ## 0.8.0
 
 - Add `payments.methods()` — the bolívar methods your account can take now (`pago_movil`, `c2p`, `vpos`), with a `reason` when unavailable. Sync and async.

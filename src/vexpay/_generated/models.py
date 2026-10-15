@@ -137,6 +137,7 @@ class CreateWebhookDto(BaseModel):
             "conversion.created",
             "conversion.completed",
             "conversion.canceled",
+            "onward_payout.updated",
             "tenant.status_changed",
             "tenant.api_key.created",
             "tenant.api_key.rotated",
@@ -177,6 +178,7 @@ class WebhookEndpointDto(BaseModel):
             "conversion.created",
             "conversion.completed",
             "conversion.canceled",
+            "onward_payout.updated",
             "tenant.status_changed",
             "tenant.api_key.created",
             "tenant.api_key.rotated",
@@ -224,6 +226,7 @@ class UpdateWebhookDto(BaseModel):
                 "conversion.created",
                 "conversion.completed",
                 "conversion.canceled",
+                "onward_payout.updated",
                 "tenant.status_changed",
                 "tenant.api_key.created",
                 "tenant.api_key.rotated",
@@ -1406,9 +1409,20 @@ class QuoteResponseDto(BaseModel):
     usdAmount: float = Field(..., examples=[25])
     bcvRate: float = Field(..., examples=[36.5])
     """
-    Authoritative VEX FX BCV rate used for payment settlement
+    Official VEX FX BCV rate (Bs per $1).
+    """
+    rate: Optional[float] = Field(None, examples=[36.5])
+    """
+    Rate your payments are priced at (Bs per $1): `bcvRate` for BCV accounts, the market rate for MARKET accounts.
+    """
+    rateSource: Optional[Literal["BCV", "MARKET"]] = Field(None, examples=["BCV"])
+    """
+    Your account's Bolívar rate setting.
     """
     vesAmount: float = Field(..., examples=[912.5])
+    """
+    usdAmount × rate, rounded to the cent: what a payment created now would charge.
+    """
     medianRate: float = Field(..., examples=[36.55])
     """
     Median of available BCV sources (VEX FX + bank)
@@ -1433,14 +1447,29 @@ class QuoteResponseDto(BaseModel):
     """
 
 
+class OnwardPayoutDto(BaseModel):
+    network: str = Field(..., examples=["BEP20"])
+    """
+    USDT payout network (see GET /v1/crypto/networks).
+    """
+    address: str = Field(..., examples=["0x2f5c…"])
+    """
+    Destination wallet address. Only its format is checked: a wrong but valid address cannot be recovered.
+    """
+    tag: Optional[str] = None
+    """
+    Destination tag / memo, for networks that need one (e.g. TON).
+    """
+
+
 class C2pRequestDto(BaseModel):
     usdAmount: Optional[float] = Field(None, examples=[25], ge=0.01, le=100000.0)
     """
-    USD amount. Required unless vesAmount is set. When only usdAmount is set, VES is derived at the live BCV rate.
+    USD amount. Required unless vesAmount is set. When only usdAmount is set, VES is derived at your Bolívar rate (live BCV, or market if you chose it).
     """
     vesAmount: Optional[float] = Field(None, examples=[50], ge=0.01, le=100000000.0)
     """
-    VES amount debited at the bank. When set, locks the bolívar charge and derives USD at BCV (it wins over usdAmount). The intent keeps this amount until it is executed.
+    VES amount debited at the bank. When set, locks the bolívar charge and derives USD at your Bolívar rate (it wins over usdAmount). The intent keeps this amount until it is executed.
     """
     debtorId: str = Field(..., examples=["V12345678"])
     debtorCellPhone: str = Field(..., examples=["584121234567"])
@@ -1466,6 +1495,44 @@ class C2pRequestDto(BaseModel):
     """
     Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
     """
+    onwardPayout: Optional[OnwardPayoutDto] = None
+    """
+    Convert this payment's net VES to USDT once it completes and send it to this wallet. Needs USDT and conversions enabled; not allowed with merchantId. See the "Pay in bolívars, receive USDT" guide.
+    """
+
+
+class OnwardPayoutStatusDto(BaseModel):
+    status: Literal[
+        "pending", "converting", "sending", "completed", "held", "failed", "canceled"
+    ] = Field(..., examples=["completed"])
+    network: str = Field(..., examples=["BEP20"])
+    address: str = Field(..., examples=["0x2f5c0000000000000000000000000000000000aa"])
+    tag: Optional[str] = None
+    conversionId: Optional[str] = None
+    """
+    The VES → USDT conversion, once created.
+    """
+    payoutId: Optional[str] = None
+    """
+    The USDT payout, once created.
+    """
+    amountUsdt: Optional[str] = Field(None, examples=["18.94"])
+    """
+    USDT sent to the address.
+    """
+    feeUsdt: Optional[str] = Field(None, examples=["0.75"])
+    """
+    Network payout fee.
+    """
+    txHash: Optional[str] = None
+    """
+    On-chain hash once the payout completed.
+    """
+    reason: Optional[str] = Field(None, examples=["below_payout_minimum"])
+    """
+    Why it is held, failed or canceled.
+    """
+    updatedAt: AwareDatetime
 
 
 class C2pIntentResponseDto(BaseModel):
@@ -1479,6 +1546,17 @@ class C2pIntentResponseDto(BaseModel):
     usdAmount: float = Field(..., examples=[25])
     vesAmount: float = Field(..., examples=[912.5])
     bcvRate: float = Field(..., examples=[36.5])
+    """
+    Official BCV rate (Bs per $1) when the payment was created. Reference only; see `rate`.
+    """
+    rate: Optional[float] = Field(None, examples=[36.5])
+    """
+    Rate (Bs per $1) this payment was priced at: equal to `bcvRate` for BCV tenants, the market rate for MARKET tenants.
+    """
+    rateSource: Optional[Literal["BCV", "MARKET"]] = Field(None, examples=["BCV"])
+    """
+    Source of `rate`: the account's Bolívar rate setting when the payment was created.
+    """
     feeUsd: Optional[float] = Field(None, examples=[0.88])
     """
     Platform service fee, USD. Clamped 0..usdAmount.
@@ -1511,6 +1589,10 @@ class C2pIntentResponseDto(BaseModel):
     reversedAt: Optional[AwareDatetime] = None
     reversalRef: Optional[str] = Field(None, examples=["00991420"])
     reversalTxId: Optional[float] = Field(None, examples=[842950])
+    onwardPayout: Optional[OnwardPayoutStatusDto] = None
+    """
+    Present when the pay-in was sent with `onwardPayout`.
+    """
     intentId: str
     """
     Use this value as intentId when executing the C2P charge.
@@ -1528,11 +1610,11 @@ class C2pPaymentDto(BaseModel):
     """
     usdAmount: Optional[float] = Field(None, examples=[25], ge=0.01, le=100000.0)
     """
-    USD amount. Required unless vesAmount or intentId is set. When only usdAmount is set, VES is derived at the live BCV rate.
+    USD amount. Required unless vesAmount or intentId is set. When only usdAmount is set, VES is derived at your Bolívar rate (live BCV, or market if you chose it).
     """
     vesAmount: Optional[float] = Field(None, examples=[50], ge=0.01, le=100000000.0)
     """
-    VES amount debited at the bank. When set, locks the bolívar charge and derives USD at BCV (it wins over usdAmount). With intentId the amount locked on the intent is charged; amounts sent here must match it (±0.01 Bs / ±$0.01).
+    VES amount debited at the bank. When set, locks the bolívar charge and derives USD at your Bolívar rate (it wins over usdAmount). With intentId the amount locked on the intent is charged; amounts sent here must match it (±0.01 Bs / ±$0.01).
     """
     debtorId: str = Field(..., examples=["V12345678"])
     debtorCellPhone: str = Field(..., examples=["584121234567"])
@@ -1562,6 +1644,10 @@ class C2pPaymentDto(BaseModel):
     """
     Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
     """
+    onwardPayout: Optional[OnwardPayoutDto] = None
+    """
+    Convert this payment's net VES to USDT once it completes and send it to this wallet. Needs USDT and conversions enabled; not allowed with merchantId. See the "Pay in bolívars, receive USDT" guide.
+    """
 
 
 class PaymentReceiptDto(BaseModel):
@@ -1575,6 +1661,17 @@ class PaymentReceiptDto(BaseModel):
     usdAmount: float = Field(..., examples=[25])
     vesAmount: float = Field(..., examples=[912.5])
     bcvRate: float = Field(..., examples=[36.5])
+    """
+    Official BCV rate (Bs per $1) when the payment was created. Reference only; see `rate`.
+    """
+    rate: Optional[float] = Field(None, examples=[36.5])
+    """
+    Rate (Bs per $1) this payment was priced at: equal to `bcvRate` for BCV tenants, the market rate for MARKET tenants.
+    """
+    rateSource: Optional[Literal["BCV", "MARKET"]] = Field(None, examples=["BCV"])
+    """
+    Source of `rate`: the account's Bolívar rate setting when the payment was created.
+    """
     feeUsd: Optional[float] = Field(None, examples=[0.88])
     """
     Platform service fee, USD. Clamped 0..usdAmount.
@@ -1607,16 +1704,20 @@ class PaymentReceiptDto(BaseModel):
     reversedAt: Optional[AwareDatetime] = None
     reversalRef: Optional[str] = Field(None, examples=["00991420"])
     reversalTxId: Optional[float] = Field(None, examples=[842950])
+    onwardPayout: Optional[OnwardPayoutStatusDto] = None
+    """
+    Present when the pay-in was sent with `onwardPayout`.
+    """
 
 
 class VposPaymentDto(BaseModel):
     usdAmount: Optional[float] = Field(None, examples=[25], ge=0.01, le=100000.0)
     """
-    USD amount. Required unless vesAmount is set. When only usdAmount is set, VES is derived at the live BCV rate.
+    USD amount. Required unless vesAmount is set. When only usdAmount is set, VES is derived at your Bolívar rate (live BCV, or market if you chose it).
     """
     vesAmount: Optional[float] = Field(None, examples=[50], ge=0.01, le=100000000.0)
     """
-    VES amount charged at the bank. When set, locks the bolívar charge and derives USD at BCV — use this to avoid USD↔VES 2-decimal round-trip drift (e.g. Bs. 50 → $0.07 → Bs. 52.86).
+    VES amount charged at the bank. When set, locks the bolívar charge and derives USD at your Bolívar rate — use this to avoid USD↔VES 2-decimal round-trip drift (e.g. Bs. 50 → $0.07 → Bs. 52.86).
     """
     cardNumber: str = Field(..., examples=["4111111111111111"], pattern="^\\d{13,19}$")
     """
@@ -1644,6 +1745,10 @@ class VposPaymentDto(BaseModel):
     externalRef: Optional[str] = Field(None, examples=["order-1042"], max_length=64)
     """
     Correlation value; not an idempotency key.
+    """
+    beneficiary: Optional[str] = Field(None, examples=["@maria"], max_length=80)
+    """
+    Who the funds are for when that is not a merchant (e.g. the wallet user being topped up). Shown to ops only; does not affect settlement.
     """
     merchantId: Optional[str] = None
     applicationFeeVes: Optional[str] = Field(None, examples=["50.00"])
@@ -1738,6 +1843,10 @@ class PagoMovilVerifyDto(BaseModel):
     debtorCellPhone: Optional[str] = Field(None, examples=["04149333844"])
     """
     Payer Pago Móvil phone (11-digit local, e.g. 04149333844). Required by some receiving banks when txType is pago_movil — send it whenever you have it.
+    """
+    onwardPayout: Optional[OnwardPayoutDto] = None
+    """
+    Convert this payment's net VES to USDT once it completes and send it to this wallet. Needs USDT and conversions enabled; not allowed with merchantId. See the "Pay in bolívars, receive USDT" guide.
     """
 
 
