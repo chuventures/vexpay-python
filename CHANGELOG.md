@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+
+- Balances are held 24h before payouts can spend them (tenant balance hold). Balance reads add `heldVes`/`held`/`heldCop` and `nextReleaseAt`; `GET /v1/balance` adds `balanceHoldHours`; balance movements carry `availableAt` while held. Payout `insufficient_balance` errors include the held amount and `nextReleaseAt`. Onward payouts add the `waiting_release` status with `sendAfter` (converted, waiting for the hold to end before sending). All new fields are optional.
+
 ## 0.9.0
 
 - Pay in bolívars, receive USDT (sync and async): `payments.pago_movil.verify()`, `payments.c2p.request()` and `payments.c2p.execute()` accept `onwardPayout: {"network", "address", "tag"?}`. Once the payment completes, its net VES is converted to USDT and sent to that wallet. Payment reads and `payment.*` webhooks carry `onwardPayout` (status `pending` | `converting` | `sending` | `completed` | `held` | `failed` | `canceled`, with `conversionId`, `payoutId`, `amountUsdt`, `feeUsdt`, `txHash`, `reason`). New webhook event `onward_payout.updated`.

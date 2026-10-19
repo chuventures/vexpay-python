@@ -42,9 +42,19 @@ class PlatformBalanceDto(BaseModel):
     """
     reserveVes: str = Field(..., examples=["100.00"])
     ledgerNetVes: str = Field(..., examples=["8650.00"])
-    availableVes: str = Field(..., examples=["8650.00"])
+    heldVes: Optional[str] = Field(None, examples=["4500.00"])
     """
-    Tenant spendable float after reserve (seller obligations already deducted via SELLER_TRANSFER).
+    VES under the 24h balance hold: incoming credits count in `ledgerNetVes` but cannot be paid out until their hold ends. Conversions and seller transfers may still use them.
+    """
+    nextReleaseAt: Optional[AwareDatetime] = Field(
+        None, examples=["2026-10-20T00:48:52.784Z"]
+    )
+    """
+    When the soonest held amount becomes available; null when nothing is held.
+    """
+    availableVes: str = Field(..., examples=["4150.00"])
+    """
+    What payouts can spend: ledgerNetVes − reserveVes − heldVes (seller obligations already deducted via SELLER_TRANSFER).
     """
     platformAvailableVes: str = Field(..., examples=["8650.00"])
     sellerObligationsVes: str = Field(..., examples=["1200.00"])
@@ -55,6 +65,10 @@ class PlatformBalanceDto(BaseModel):
     sellerAvailableVes: str = Field(..., examples=["800.00"])
     feePercent: str = Field(..., examples=["2.5000"])
     feeFixedUsd: str = Field(..., examples=["0.00"])
+    balanceHoldHours: Optional[float] = Field(None, examples=[24])
+    """
+    Hours each incoming credit is held before payouts can spend it (0 = no hold). Set by VEXPay.
+    """
 
 
 class BalanceTransactionDto(BaseModel):
@@ -77,6 +91,7 @@ class BalanceTransactionDto(BaseModel):
         "seller_transfer_reversal",
         "conversion",
         "conversion_reversal",
+        "merchant_payout_fee",
     ] = Field(..., examples=["chargeback"])
     amountVes: str = Field(..., examples=["-4000.00"])
     """
@@ -94,6 +109,10 @@ class BalanceTransactionDto(BaseModel):
     externalRef of the linked payment or payout.
     """
     description: str = Field(..., examples=["Card chargeback (fraud)"])
+    availableAt: Optional[AwareDatetime] = None
+    """
+    Part of the 24h balance hold: this movement counts in `heldVes` (not `availableVes`) until this time.
+    """
     createdAt: AwareDatetime
 
 
@@ -948,7 +967,15 @@ class CryptoBalanceDto(BaseModel):
     currency: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
     available: str = Field(..., examples=["97.00"])
     """
-    Available for payouts, in `currency` (ledger).
+    Available for payouts, in `currency` (ledger). Excludes `held`.
+    """
+    held: Optional[str] = Field(None, examples=["0.00"])
+    """
+    Under the 24h balance hold: credited but not payable until its hold ends, in `currency`.
+    """
+    nextReleaseAt: Optional[AwareDatetime] = None
+    """
+    When the soonest held amount becomes available; null when nothing is held.
     """
     pendingPayout: str = Field(..., examples=["50.10"])
     """
@@ -961,6 +988,10 @@ class CryptoBalanceDto(BaseModel):
     pendingPayoutUsdt: Optional[str] = Field(None, examples=["50.10"])
     """
     USDT only: same as `pendingPayout`.
+    """
+    heldUsdt: Optional[str] = Field(None, examples=["0.00"])
+    """
+    USDT only: same as `held`.
     """
     asOf: AwareDatetime
 
@@ -1129,9 +1160,9 @@ class CopBuyerDto(BaseModel):
 
 
 class CreateCopPaymentDto(BaseModel):
-    amountCop: float = Field(..., examples=[100000])
+    amountCop: float = Field(..., examples=[100000], ge=2000.0)
     """
-    Amount in whole Colombian pesos.
+    Amount in whole Colombian pesos. At least 2,000 (`amount_below_minimum` otherwise).
     """
     channel: Literal["breb", "nequi", "daviplata"] = Field(..., examples=["breb"])
     """
@@ -1213,7 +1244,15 @@ class SubmitCopOtpDto(BaseModel):
 class CopBalanceDto(BaseModel):
     availableCop: float = Field(..., examples=[96500])
     """
-    Whole pesos available for payout.
+    Whole pesos available for payout. Excludes `heldCop`.
+    """
+    heldCop: Optional[float] = Field(None, examples=[0])
+    """
+    Whole pesos under the 24h balance hold: credited but not payable until the hold ends.
+    """
+    nextReleaseAt: Optional[AwareDatetime] = None
+    """
+    When the soonest held amount becomes available; null when nothing is held.
     """
     pendingPayoutCop: float = Field(..., examples=[0])
     """
@@ -1503,8 +1542,18 @@ class C2pRequestDto(BaseModel):
 
 class OnwardPayoutStatusDto(BaseModel):
     status: Literal[
-        "pending", "converting", "sending", "completed", "held", "failed", "canceled"
+        "pending",
+        "converting",
+        "waiting_release",
+        "sending",
+        "completed",
+        "held",
+        "failed",
+        "canceled",
     ] = Field(..., examples=["completed"])
+    """
+    `waiting_release`: converted, waiting for the 24h balance hold to end before sending (see `sendAfter`).
+    """
     network: str = Field(..., examples=["BEP20"])
     address: str = Field(..., examples=["0x2f5c0000000000000000000000000000000000aa"])
     tag: Optional[str] = None
@@ -1531,6 +1580,10 @@ class OnwardPayoutStatusDto(BaseModel):
     reason: Optional[str] = Field(None, examples=["below_payout_minimum"])
     """
     Why it is held, failed or canceled.
+    """
+    sendAfter: Optional[AwareDatetime] = None
+    """
+    `waiting_release` only: when the converted USDT leaves the balance hold and the payout is sent.
     """
     updatedAt: AwareDatetime
 
@@ -1993,6 +2046,29 @@ class VerifyConfirmResponseDto(BaseModel):
     payoutMethodId: str
 
 
+class MerchantCopBalanceDto(BaseModel):
+    pendingCop: str = Field(..., examples=["16002"])
+    """
+    COP sales still in the seller hold.
+    """
+    availableCop: str = Field(..., examples=["30000"])
+    """
+    COP the seller can pay out.
+    """
+    payoutPendingCop: str = Field(..., examples=["0"])
+    """
+    COP payouts requested and not yet paid.
+    """
+    paidOutCop: str = Field(..., examples=["0"])
+    """
+    COP paid out to the seller so far.
+    """
+    sweepRate: Optional[str] = Field(None, examples=["3939.0000"])
+    """
+    VEX Wallet sellers: COP per US$1 a wallet sweep would use now (display only). Omitted when no fresh rate.
+    """
+
+
 class MerchantBalanceDto(BaseModel):
     merchantId: str
     accountId: str = Field(..., examples=["acct_3fd84b2d9ad14f74a2d90f2f56984db5"])
@@ -2001,6 +2077,10 @@ class MerchantBalanceDto(BaseModel):
     availableVes: str = Field(..., examples=["250.00"])
     paidOutVes: str = Field(..., examples=["50.00"])
     ledgerNetVes: str = Field(..., examples=["350.00"])
+    cop: Optional[MerchantCopBalanceDto] = None
+    """
+    COP balances from COP sales on seller links. Present only once the seller has COP activity.
+    """
 
 
 class CreateMerchantDto(BaseModel):
