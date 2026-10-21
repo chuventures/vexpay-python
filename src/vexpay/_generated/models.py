@@ -272,9 +272,13 @@ class PayoutResponseDto(BaseModel):
     """
     Payout id. Empty string only on batch item failures that never created a row.
     """
-    status: Literal["completed", "pending", "failed"]
+    status: Literal["completed", "pending", "failed", "awaiting_approval"]
     """
-    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id.
+    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit`, funds returned) when rejected.
+    """
+    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT"]] = None
+    """
+    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent).
     """
     reference: Optional[str] = None
     """
@@ -341,9 +345,13 @@ class PayoutBatchItemResultDto(BaseModel):
     """
     Payout id. Empty string only on batch item failures that never created a row.
     """
-    status: Literal["completed", "pending", "failed"]
+    status: Literal["completed", "pending", "failed", "awaiting_approval"]
     """
-    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id.
+    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit`, funds returned) when rejected.
+    """
+    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT"]] = None
+    """
+    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent).
     """
     reference: Optional[str] = None
     """
@@ -786,7 +794,7 @@ class ImmediateDebitDto(BaseModel):
         None, examples=["fine_736a0b42-0b6e-454c-b87e-7f3c0e47057b"], max_length=64
     )
     """
-    Tenant correlation value for recovery lookup (GET /v1/payments/by-ref/:externalRef). Not an idempotency key.
+    Tenant correlation value for recovery lookup (GET /v1/payments/by-ref/:externalRef). Not an idempotency key; a ref that already has a COMPLETED payment is refused (409 external_ref_already_paid).
     """
     merchantId: Optional[str] = None
     applicationFeeVes: Optional[str] = Field(None, examples=["50.00"])
@@ -1521,7 +1529,7 @@ class C2pRequestDto(BaseModel):
     """
     externalRef: Optional[str] = Field(None, examples=["order-1042"], max_length=64)
     """
-    Correlation value; not an idempotency key. When present, any other PENDING C2P intent for this tenant + externalRef is canceled (superseded) before the new intent is created.
+    Correlation value; not an idempotency key. A ref that already has a COMPLETED payment is refused (409 external_ref_already_paid). When present, any other PENDING C2P intent for this tenant + externalRef is canceled (superseded) before the new intent is created.
     """
     merchantId: Optional[str] = None
     applicationFeeVes: Optional[str] = Field(None, examples=["50.00"])
@@ -1681,7 +1689,7 @@ class C2pPaymentDto(BaseModel):
     """
     externalRef: Optional[str] = Field(None, examples=["order-1042"], max_length=64)
     """
-    Correlation value; not an idempotency key.
+    Correlation value; not an idempotency key. A ref that already has a COMPLETED payment is refused (409 external_ref_already_paid).
     """
     merchantId: Optional[str] = None
     """
@@ -1797,7 +1805,7 @@ class VposPaymentDto(BaseModel):
     """
     externalRef: Optional[str] = Field(None, examples=["order-1042"], max_length=64)
     """
-    Correlation value; not an idempotency key.
+    Correlation value; not an idempotency key. A ref that already has a COMPLETED payment is refused (409 external_ref_already_paid).
     """
     beneficiary: Optional[str] = Field(None, examples=["@maria"], max_length=80)
     """
@@ -2194,6 +2202,16 @@ class CreateCheckoutSessionDto(BaseModel):
     """
     Up to 20 string key/value pairs (keys ≤ 40 chars, values ≤ 500 chars).
     """
+    merchantId: Optional[str] = Field(
+        None, examples=["3fd84b2d-9ad1-4f74-a2d9-0f2f56984db5"]
+    )
+    """
+    Split the payment with one of your merchants (UUID or `mrc_` id). The merchant's share is credited to its VES balance when the payment completes. Only bolívar methods (`c2p`, `pago_movil`, `vpos`) are offered.
+    """
+    applicationFeePercent: Optional[float] = Field(None, examples=[3], ge=0.0, le=100.0)
+    """
+    Commission percent you keep when `merchantId` is set. Omit to use the merchant's commission, then your default commission.
+    """
 
 
 class CheckoutSessionResponseDto(BaseModel):
@@ -2222,6 +2240,14 @@ class CheckoutSessionResponseDto(BaseModel):
     """
     expiresAt: AwareDatetime
     createdAt: AwareDatetime
+    merchantId: Optional[str] = None
+    """
+    Merchant the payment is split with.
+    """
+    applicationFeePercent: Optional[str] = Field(None, examples=["3"])
+    """
+    Commission percent set on the session; null = merchant or tenant default at payment time.
+    """
     livemode: bool
     """
     false for test-mode tenants.
