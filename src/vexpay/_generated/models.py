@@ -162,6 +162,25 @@ class CreateWebhookDto(BaseModel):
             "tenant.api_key.rotated",
             "tenant.api_key.revoked",
             "tenant.live_status_changed",
+            "customer.created",
+            "customer.updated",
+            "customer.deleted",
+            "customer.subscription.created",
+            "customer.subscription.updated",
+            "customer.subscription.deleted",
+            "customer.subscription.trial_will_end",
+            "customer.subscription.reactivated",
+            "invoice.created",
+            "invoice.upcoming",
+            "invoice.paid",
+            "invoice.payment_attempt",
+            "invoice.payment_failed",
+            "invoice.overdue",
+            "invoice.voided",
+            "invoice.marked_uncollectible",
+            "payment_method.attached",
+            "payment_method.updated",
+            "payment_method.detached",
             "notification.test",
         ]
     ] = Field(..., examples=[["payment.completed", "payment.failed"]])
@@ -203,6 +222,25 @@ class WebhookEndpointDto(BaseModel):
             "tenant.api_key.rotated",
             "tenant.api_key.revoked",
             "tenant.live_status_changed",
+            "customer.created",
+            "customer.updated",
+            "customer.deleted",
+            "customer.subscription.created",
+            "customer.subscription.updated",
+            "customer.subscription.deleted",
+            "customer.subscription.trial_will_end",
+            "customer.subscription.reactivated",
+            "invoice.created",
+            "invoice.upcoming",
+            "invoice.paid",
+            "invoice.payment_attempt",
+            "invoice.payment_failed",
+            "invoice.overdue",
+            "invoice.voided",
+            "invoice.marked_uncollectible",
+            "payment_method.attached",
+            "payment_method.updated",
+            "payment_method.detached",
             "notification.test",
         ]
     ]
@@ -251,6 +289,25 @@ class UpdateWebhookDto(BaseModel):
                 "tenant.api_key.rotated",
                 "tenant.api_key.revoked",
                 "tenant.live_status_changed",
+                "customer.created",
+                "customer.updated",
+                "customer.deleted",
+                "customer.subscription.created",
+                "customer.subscription.updated",
+                "customer.subscription.deleted",
+                "customer.subscription.trial_will_end",
+                "customer.subscription.reactivated",
+                "invoice.created",
+                "invoice.upcoming",
+                "invoice.paid",
+                "invoice.payment_attempt",
+                "invoice.payment_failed",
+                "invoice.overdue",
+                "invoice.voided",
+                "invoice.marked_uncollectible",
+                "payment_method.attached",
+                "payment_method.updated",
+                "payment_method.detached",
                 "notification.test",
             ]
         ]
@@ -2339,3 +2396,314 @@ class NotificationTestResponseDto(BaseModel):
     sent: bool = Field(..., examples=[True])
     event: str = Field(..., examples=["notification.test"])
     tenantId: str
+
+
+class CreateCustomerDto(BaseModel):
+    name: Optional[str] = Field(None, examples=["Ana Pérez"], max_length=120)
+    email: Optional[str] = Field(None, examples=["ana@example.com"], max_length=254)
+    phone: Optional[str] = Field(None, examples=["04141234567"])
+    """
+    Venezuelan mobile; stored as 11 digits starting with 04.
+    """
+    idNumber: Optional[str] = Field(None, examples=["V-12.345.678"])
+    """
+    Cédula or RIF; stored canonical, e.g. V12345678.
+    """
+    bankCode: Optional[str] = Field(None, examples=["0102"])
+    """
+    4-digit bank code from GET /v1/banks.
+    """
+    metadata: Optional[dict[str, str]] = None
+    """
+    ≤ 20 string key/value pairs.
+    """
+    testClock: Optional[str] = None
+    """
+    Test clock id (test mode only). Not available yet.
+    """
+
+
+class CustomerResponseDto(BaseModel):
+    id: str = Field(..., examples=["cus_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    object: str = Field(..., examples=["customer"])
+    name: Optional[str] = Field(...)
+    email: Optional[str] = Field(...)
+    emailStatus: Literal["none", "deliverable", "undeliverable"]
+    phone: Optional[str] = Field(...)
+    idNumber: Optional[str] = Field(...)
+    bankCode: Optional[str] = Field(...)
+    metadata: dict[str, str]
+    testClock: Optional[str] = Field(...)
+    createdAt: str
+    livemode: bool
+
+
+class CustomerListResponseDto(BaseModel):
+    items: list[CustomerResponseDto]
+    nextCursor: Optional[str] = Field(...)
+
+
+class UpdateCustomerDto(BaseModel):
+    name: Optional[str] = Field(None, examples=["Ana Pérez"], max_length=120)
+    email: Optional[str] = Field(None, examples=["ana@example.com"], max_length=254)
+    phone: Optional[str] = Field(None, examples=["04141234567"])
+    """
+    Venezuelan mobile; stored as 11 digits starting with 04.
+    """
+    idNumber: Optional[str] = Field(None, examples=["V-12.345.678"])
+    """
+    Cédula or RIF; stored canonical, e.g. V12345678.
+    """
+    bankCode: Optional[str] = Field(None, examples=["0102"])
+    """
+    4-digit bank code from GET /v1/banks.
+    """
+    metadata: Optional[dict[str, str]] = None
+    """
+    ≤ 20 string key/value pairs.
+    """
+    testClock: Optional[str] = None
+    """
+    Test clock id (test mode only). Not available yet.
+    """
+
+
+class DeletedObjectResponseDto(BaseModel):
+    id: str
+    deleted: bool = Field(..., examples=[True])
+
+
+class RecurringDto(BaseModel):
+    interval: Literal["day", "week", "month", "year"] = Field(..., examples=["month"])
+    intervalCount: float = Field(1, examples=[1])
+    """
+    The whole interval is at most one year.
+    """
+
+
+class CreatePriceDto(BaseModel):
+    product: str
+    """
+    Product id.
+    """
+    unitAmountUsd: float = Field(..., examples=[10])
+    """
+    USD amount, up to 2 decimals, at least the minimum charge.
+    """
+    recurring: RecurringDto
+    nickname: Optional[str] = Field(None, max_length=80)
+    metadata: Optional[dict[str, str]] = None
+
+
+class PriceRecurringResponseDto(BaseModel):
+    interval: Literal["day", "week", "month", "year"]
+    intervalCount: float
+
+
+class PriceResponseDto(BaseModel):
+    id: str = Field(..., examples=["price_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    object: str = Field(..., examples=["price"])
+    product: str
+    unitAmountUsd: str = Field(..., examples=["10.00"])
+    currency: str = Field(..., examples=["USD"])
+    recurring: PriceRecurringResponseDto
+    nickname: Optional[str] = Field(...)
+    active: bool
+    metadata: dict[str, str]
+    createdAt: str
+    livemode: bool
+
+
+class PriceListResponseDto(BaseModel):
+    items: list[PriceResponseDto]
+    nextCursor: Optional[str] = Field(...)
+
+
+class UpdatePriceDto(BaseModel):
+    active: Optional[bool] = None
+    nickname: Optional[str] = Field(None, max_length=80)
+    metadata: Optional[dict[str, str]] = None
+
+
+class CreateSubscriptionDto(BaseModel):
+    customer: str
+    """
+    Customer id (cus_…).
+    """
+    price: str
+    """
+    Active recurring price id (price_…).
+    """
+    collectionMethod: Literal["send_invoice", "charge_automatically"] = "send_invoice"
+    """
+    `charge_automatically` charges the customer's domiciliación on each collection attempt; the tenant must be allowed domiciliación.
+    """
+    collectionAttempts: Optional[float] = Field(None, ge=1.0, le=15.0)
+    """
+    Daily collection attempts on each invoice before the subscription is canceled. Omit or null for the tenant's default (3 unless changed).
+    """
+    paymentMethod: Optional[str] = None
+    """
+    Domiciliación payment method (pm_…, charge_automatically only). Default: the customer's most recent method that is not inactive.
+    """
+    trialPeriodDays: Optional[float] = Field(None, ge=1.0, le=730.0)
+    trialEnd: Optional[str] = None
+    """
+    ISO time in the future when the trial ends.
+    """
+    cancelAtPeriodEnd: bool = False
+    methods: Optional[
+        list[Literal["c2p", "pago_movil", "vpos", "usdt", "usdc", "cop"]]
+    ] = None
+    """
+    Hosted checkout methods offered on its invoices.
+    """
+    metadata: Optional[dict[str, str]] = None
+
+
+class SubscriptionResponseDto(BaseModel):
+    id: str = Field(..., examples=["sub_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    object: str = Field(..., examples=["subscription"])
+    customer: str
+    price: PriceResponseDto
+    status: Literal["trialing", "active", "past_due", "canceled"]
+    collectionMethod: Literal["send_invoice", "charge_automatically"]
+    collectionAttempts: Optional[float] = Field(...)
+    """
+    Null = the tenant's default.
+    """
+    paymentMethod: Optional[str] = Field(...)
+    currentPeriodStart: str
+    currentPeriodEnd: str
+    trialStart: Optional[str] = Field(...)
+    trialEnd: Optional[str] = Field(...)
+    cancelAtPeriodEnd: bool
+    canceledAt: Optional[str] = Field(...)
+    cancellationReason: Optional[Literal["requested", "payment_failed"]] = Field(...)
+    latestInvoice: Optional[str] = Field(...)
+    methods: list[Literal["c2p", "pago_movil", "vpos", "usdt", "usdc", "cop"]]
+    metadata: dict[str, str]
+    createdAt: str
+    livemode: bool
+
+
+class SubscriptionListResponseDto(BaseModel):
+    items: list[SubscriptionResponseDto]
+    nextCursor: Optional[str] = Field(...)
+
+
+class UpdateSubscriptionDto(BaseModel):
+    cancelAtPeriodEnd: Optional[bool] = None
+    collectionMethod: Optional[Literal["send_invoice", "charge_automatically"]] = None
+    paymentMethod: Optional[str] = None
+    collectionAttempts: Optional[float] = Field(None, ge=1.0, le=15.0)
+    """
+    null = the tenant's default.
+    """
+    methods: Optional[
+        list[Literal["c2p", "pago_movil", "vpos", "usdt", "usdc", "cop"]]
+    ] = None
+    metadata: Optional[dict[str, str]] = None
+
+
+class InvoiceBillingFeeResponseDto(BaseModel):
+    amount: str = Field(..., examples=["43.90"])
+    currency: Literal["VES", "USDT", "USDC", "COP"]
+    percent: str = Field(..., examples=["0.5"])
+
+
+class InvoiceResponseDto(BaseModel):
+    id: str = Field(..., examples=["in_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    object: str = Field(..., examples=["invoice"])
+    number: str = Field(..., examples=["K7Q2M9XA-0001"])
+    status: Literal["open", "paid", "void", "uncollectible"]
+    customer: str
+    subscription: str
+    collectionMethod: Literal["send_invoice", "charge_automatically"]
+    amountDueUsd: str = Field(..., examples=["10.00"])
+    amountPaidUsd: str = Field(..., examples=["0.00"])
+    currency: str = Field(..., examples=["USD"])
+    periodStart: str
+    periodEnd: str
+    dueDate: str
+    """
+    Invoices are due when issued.
+    """
+    attemptsTotal: float
+    """
+    Daily collection attempts for this invoice.
+    """
+    attemptCount: float
+    nextPaymentAttempt: Optional[str] = Field(...)
+    paidAt: Optional[str] = Field(...)
+    paidOutOfBand: bool
+    paymentId: Optional[str] = Field(...)
+    billingFee: Optional[InvoiceBillingFeeResponseDto] = Field(...)
+    hostedInvoiceUrl: Optional[str] = Field(...)
+    createdAt: str
+    livemode: bool
+
+
+class InvoiceListResponseDto(BaseModel):
+    items: list[InvoiceResponseDto]
+    nextCursor: Optional[str] = Field(...)
+
+
+class PayInvoiceDto(BaseModel):
+    paidOutOfBand: bool = Field(..., examples=[True])
+    """
+    Mark the invoice paid outside VEXPay (cash, transfer). No balance change.
+    """
+
+
+class CreateSetupSessionDto(BaseModel):
+    customer: str
+    """
+    Customer id (cus_…).
+    """
+    successUrl: Optional[str] = Field(None, max_length=2048)
+    """
+    Where the setup page sends the customer when done (https).
+    """
+
+
+class SetupSessionResponseDto(BaseModel):
+    id: str = Field(..., examples=["seti_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    object: str = Field(..., examples=["setup_session"])
+    url: Optional[str] = Field(...)
+    """
+    Hosted authorization page. Only returned on create.
+    """
+    customer: str
+    status: Literal["open", "complete", "expired"]
+    paymentMethod: Optional[str] = Field(...)
+    successUrl: Optional[str] = Field(...)
+    expiresAt: str
+    createdAt: str
+    livemode: bool
+
+
+class PaymentMethodResponseDto(BaseModel):
+    id: str = Field(..., examples=["pm_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    object: str = Field(..., examples=["payment_method"])
+    type: str = Field(..., examples=["domiciliacion"])
+    customer: str
+    status: Literal["pending", "active", "inactive"]
+    """
+    pending until a charge succeeds; inactive when the bank reports the affiliation inactive.
+    """
+    phoneLast4: str = Field(..., examples=["4567"])
+    bankCode: str = Field(..., examples=["0102"])
+    createdAt: str
+    activatedAt: Optional[str] = Field(...)
+    deactivatedAt: Optional[str] = Field(...)
+    detachedAt: Optional[str] = Field(...)
+    """
+    Set once detached; a detached method is never charged.
+    """
+    livemode: bool
+
+
+class PaymentMethodListResponseDto(BaseModel):
+    items: list[PaymentMethodResponseDto]
+    nextCursor: Optional[str] = Field(...)

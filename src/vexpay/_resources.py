@@ -713,3 +713,200 @@ class Conversions(SyncAPIResource):
     def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.ConversionDto:
         """Cancel a ``PENDING`` conversion; the VES or COP returns to your available balance."""
         return self._request_model("Conversions_cancel", m.ConversionDto, path={"id": id}, options=options)
+
+
+# ── billing ───────────────────────────────────────────────────────────────────
+
+
+class CustomerPaymentMethods(SyncAPIResource):
+    """A customer's attached domiciliación payment methods."""
+
+    def list(
+        self, customer_id: str, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.PaymentMethodListResponseDto, m.PaymentMethodResponseDto]:
+        """Newest first."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "PaymentMethods_list",
+                m.PaymentMethodListResponseDto,
+                path={"id": customer_id},
+                query={**query, "cursor": cursor},
+                options=options,
+            ),
+            query.get("cursor"),
+        )
+
+
+class Customers(SyncAPIResource):
+    """Billing customers: who subscriptions and invoices belong to."""
+
+    def __init__(self, http: Any) -> None:
+        super().__init__(http)
+        self.payment_methods = CustomerPaymentMethods(self._http)
+
+    def create(
+        self, params: Union[m.CreateCustomerDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.CustomerResponseDto:
+        return self._request_model("Customers_create", m.CustomerResponseDto, body=params, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.CustomerListResponseDto, m.CustomerResponseDto]:
+        """Newest first; filter by ``email``."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Customers_list", m.CustomerListResponseDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.CustomerResponseDto:
+        return self._request_model("Customers_retrieve", m.CustomerResponseDto, path={"id": id}, options=options)
+
+    def update(
+        self, id: str, params: Union[m.UpdateCustomerDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.CustomerResponseDto:
+        """``None`` clears a field."""
+        return self._request_model(
+            "Customers_update", m.CustomerResponseDto, path={"id": id}, body=params, options=options
+        )
+
+    def delete(self, id: str, **options: Unpack[RequestOptions]) -> m.DeletedObjectResponseDto:
+        """Only a customer with no live subscriptions can be deleted."""
+        return self._request_model("Customers_remove", m.DeletedObjectResponseDto, path={"id": id}, options=options)
+
+
+class Prices(SyncAPIResource):
+    """Recurring USD prices on a product."""
+
+    def create(
+        self, params: Union[m.CreatePriceDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.PriceResponseDto:
+        return self._request_model("Prices_create", m.PriceResponseDto, body=params, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.PriceListResponseDto, m.PriceResponseDto]:
+        """Filter by ``product`` and ``active``."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Prices_list", m.PriceListResponseDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.PriceResponseDto:
+        return self._request_model("Prices_retrieve", m.PriceResponseDto, path={"id": id}, options=options)
+
+    def update(
+        self, id: str, params: Union[m.UpdatePriceDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.PriceResponseDto:
+        """Only ``active``, ``nickname`` and ``metadata`` can change; the amount and interval are fixed."""
+        return self._request_model("Prices_update", m.PriceResponseDto, path={"id": id}, body=params, options=options)
+
+
+class Subscriptions(SyncAPIResource):
+    """Bill a customer on a recurring price (``send_invoice`` or ``charge_automatically``)."""
+
+    def create(
+        self, params: Union[m.CreateSubscriptionDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.SubscriptionResponseDto:
+        """Pass ``idempotency_key`` to retry safely."""
+        return self._request_model("Subscriptions_create", m.SubscriptionResponseDto, body=params, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.SubscriptionListResponseDto, m.SubscriptionResponseDto]:
+        """Newest first; filter by ``customer``, ``price`` and ``status``."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Subscriptions_list", m.SubscriptionListResponseDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.SubscriptionResponseDto:
+        return self._request_model(
+            "Subscriptions_retrieve", m.SubscriptionResponseDto, path={"id": id}, options=options
+        )
+
+    def update(
+        self, id: str, params: Union[m.UpdateSubscriptionDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.SubscriptionResponseDto:
+        """Changes apply from the next invoice."""
+        return self._request_model(
+            "Subscriptions_update", m.SubscriptionResponseDto, path={"id": id}, body=params, options=options
+        )
+
+    def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.SubscriptionResponseDto:
+        """Cancel now and void its open invoices. To stop at the period end, ``update`` ``cancelAtPeriodEnd``."""
+        return self._request_model("Subscriptions_cancel", m.SubscriptionResponseDto, path={"id": id}, options=options)
+
+
+class Invoices(SyncAPIResource):
+    """Invoices that subscriptions issue each period."""
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.InvoiceListResponseDto, m.InvoiceResponseDto]:
+        """Newest first; filter by ``customer``, ``subscription`` and ``status``."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Invoices_list", m.InvoiceListResponseDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.InvoiceResponseDto:
+        return self._request_model("Invoices_retrieve", m.InvoiceResponseDto, path={"id": id}, options=options)
+
+    def void(self, id: str, **options: Unpack[RequestOptions]) -> m.InvoiceResponseDto:
+        """Void an open invoice."""
+        return self._request_model("Invoices_void", m.InvoiceResponseDto, path={"id": id}, options=options)
+
+    def mark_uncollectible(self, id: str, **options: Unpack[RequestOptions]) -> m.InvoiceResponseDto:
+        """Mark an open invoice uncollectible; it stays payable."""
+        return self._request_model(
+            "Invoices_markUncollectible", m.InvoiceResponseDto, path={"id": id}, options=options
+        )
+
+    def pay(
+        self, id: str, params: Union[m.PayInvoiceDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.InvoiceResponseDto:
+        """Mark an open invoice paid outside VEXPay (``{"paidOutOfBand": True}``). No payment, no balance change."""
+        return self._request_model("Invoices_pay", m.InvoiceResponseDto, path={"id": id}, body=params, options=options)
+
+
+class SetupSessions(SyncAPIResource):
+    """Hosted links where a customer authorizes a domiciliación (expire in 24 h)."""
+
+    def create(
+        self, params: Union[m.CreateSetupSessionDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.SetupSessionResponseDto:
+        """``url`` is returned only here — send the customer to it."""
+        return self._request_model("SetupSessions_create", m.SetupSessionResponseDto, body=params, options=options)
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.SetupSessionResponseDto:
+        return self._request_model(
+            "SetupSessions_retrieve", m.SetupSessionResponseDto, path={"id": id}, options=options
+        )
+
+
+class PaymentMethods(SyncAPIResource):
+    """Domiciliación payment methods. List a customer's with ``customers.payment_methods.list``."""
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.PaymentMethodResponseDto:
+        return self._request_model(
+            "PaymentMethods_retrieve", m.PaymentMethodResponseDto, path={"id": id}, options=options
+        )
+
+    def detach(self, id: str, **options: Unpack[RequestOptions]) -> m.PaymentMethodResponseDto:
+        """A detached method is never charged again."""
+        return self._request_model(
+            "PaymentMethods_detach", m.PaymentMethodResponseDto, path={"id": id}, options=options
+        )

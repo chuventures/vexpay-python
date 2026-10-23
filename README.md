@@ -373,6 +373,13 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `payment_links` | `retrieve`, `update`, `delete` |
 | `tenant_payout_account` | `retrieve`, `upsert`, `create`, `start_verification`, `confirm_verification` |
 | `webhook_endpoints` | `create`, `list`, `update`, `delete`, `send_test` |
+| `customers` | `create`, `list`, `retrieve`, `update`, `delete` |
+| `customers.payment_methods` | `list` |
+| `prices` | `create`, `list`, `retrieve`, `update` |
+| `subscriptions` | `create`, `list`, `retrieve`, `update`, `cancel` |
+| `invoices` | `list`, `retrieve`, `void`, `mark_uncollectible`, `pay` |
+| `setup_sessions` | `create`, `retrieve` |
+| `payment_methods` | `retrieve`, `detach` (domiciliación; `payments.methods()` lists bolívar pay-in methods) |
 | `Webhook` / `client.webhooks` | `construct_event`, `generate_test_header` (offline) |
 
 ## License

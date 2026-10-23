@@ -25,7 +25,7 @@ SNAPSHOT_OPERATIONS = {
     for op in item.values()
     if isinstance(op, dict) and "operationId" in op
 }
-PATH_ARG_NAMES = {"id", "merchant_id", "method_id", "external_ref"}
+PATH_ARG_NAMES = {"id", "merchant_id", "method_id", "external_ref", "customer_id"}
 
 
 def resource_methods(root: object, prefix: str = "") -> list[tuple[str, Any]]:
@@ -201,7 +201,7 @@ async def test_async_returns_models(server: MockServer) -> None:
 
 def test_list_methods_return_pages() -> None:
     sync_client, async_client = VexPay("k"), AsyncVexPay("k")
-    for resource in ("merchants", "payouts", "products"):
+    for resource in ("merchants", "payouts", "products", "customers", "prices", "subscriptions", "invoices"):
         assert inspect.signature(getattr(getattr(sync_client, resource), "list")).return_annotation.startswith("SyncPage[")
         assert inspect.signature(getattr(getattr(async_client, resource), "list")).return_annotation.startswith("AsyncPage[")
     assert SyncPage and AsyncPage
@@ -323,4 +323,205 @@ def test_cop_payment_otp_cancel_refund_and_balance(server: MockServer) -> None:
     assert server.requests[4].path == f"/v1/cop/payments/{COP_PAYMENT['id']}/refund"
     assert client.cop.balance.retrieve().availableCop == 96500
     assert server.requests[5].path == "/v1/cop/balance"
+
+
+# ── billing ───────────────────────────────────────────────────────────────────
+
+CUSTOMER = {
+    "id": "cus_1", "object": "customer", "name": "Ana Pérez", "email": "ana@example.com", "emailStatus": "deliverable",
+    "phone": "04141234567", "idNumber": "V12345678", "bankCode": "0102", "metadata": {"plan": "pro"},
+    "testClock": None, "createdAt": "2026-10-20T00:00:00.000Z", "livemode": False,
+}
+PRICE = {
+    "id": "price_1", "object": "price", "product": "prod_1", "unitAmountUsd": "10.00", "currency": "USD",
+    "recurring": {"interval": "month", "intervalCount": 1}, "nickname": "Monthly", "active": True, "metadata": {},
+    "createdAt": "2026-10-20T00:00:00.000Z", "livemode": False,
+}
+SUBSCRIPTION = {
+    "id": "sub_1", "object": "subscription", "customer": "cus_1", "price": PRICE, "status": "active",
+    "collectionMethod": "send_invoice", "collectionAttempts": None, "paymentMethod": None,
+    "currentPeriodStart": "2026-10-20T00:00:00.000Z", "currentPeriodEnd": "2026-11-20T00:00:00.000Z",
+    "trialStart": None, "trialEnd": None, "cancelAtPeriodEnd": False, "canceledAt": None, "cancellationReason": None,
+    "latestInvoice": "in_1", "methods": ["c2p", "pago_movil"], "metadata": {},
+    "createdAt": "2026-10-20T00:00:00.000Z", "livemode": False,
+}
+INVOICE = {
+    "id": "in_1", "object": "invoice", "number": "K7Q2M9XA-0001", "status": "open", "customer": "cus_1",
+    "subscription": "sub_1", "collectionMethod": "send_invoice", "amountDueUsd": "10.00", "amountPaidUsd": "0.00",
+    "currency": "USD", "periodStart": "2026-10-20T00:00:00.000Z", "periodEnd": "2026-11-20T00:00:00.000Z",
+    "dueDate": "2026-10-20T00:00:00.000Z", "attemptsTotal": 3, "attemptCount": 0, "nextPaymentAttempt": None,
+    "paidAt": None, "paidOutOfBand": False, "paymentId": None, "billingFee": None,
+    "hostedInvoiceUrl": "https://pay.example/i/in_1", "createdAt": "2026-10-20T00:00:00.000Z", "livemode": False,
+}
+SETUP_SESSION = {
+    "id": "seti_1", "object": "setup_session", "url": "https://pay.example/setup/seti_1", "customer": "cus_1",
+    "status": "open", "paymentMethod": None, "successUrl": None, "expiresAt": "2026-10-21T00:00:00.000Z",
+    "createdAt": "2026-10-20T00:00:00.000Z", "livemode": False,
+}
+PAYMENT_METHOD = {
+    "id": "pm_1", "object": "payment_method", "type": "domiciliacion", "customer": "cus_1", "status": "active",
+    "phoneLast4": "4567", "bankCode": "0102", "createdAt": "2026-10-20T00:00:00.000Z",
+    "activatedAt": "2026-10-20T00:00:00.000Z", "deactivatedAt": None, "detachedAt": None, "livemode": False,
+}
+
+
+def test_customers_crud_and_payment_methods(server: MockServer) -> None:
+    server.script([
+        Scripted(201, CUSTOMER),
+        Scripted(200, {"items": [CUSTOMER], "nextCursor": "cus_1"}),
+        Scripted(200, {"items": [{**CUSTOMER, "id": "cus_0"}], "nextCursor": None}),
+        Scripted(200, CUSTOMER),
+        Scripted(200, {**CUSTOMER, "phone": None}),
+        Scripted(200, {"items": [PAYMENT_METHOD], "nextCursor": None}),
+        Scripted(200, {"id": "cus_1", "deleted": True}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    created = client.customers.create({"name": "Ana Pérez", "email": "ana@example.com"}, idempotency_key="cus-1")
+    assert type(created).__name__ == "CustomerResponseDto" and created.id == "cus_1"
+    assert server.requests[0].method == "POST" and server.requests[0].path == "/v1/customers"
+    assert server.requests[0].headers["idempotency-key"] == "cus-1"
+    assert server.requests[0].body == {"name": "Ana Pérez", "email": "ana@example.com"}
+    assert [c.id for c in client.customers.list({"email": "ana@example.com", "limit": 1})] == ["cus_1", "cus_0"]
+    assert server.requests[1].path == "/v1/customers?email=ana%40example.com&limit=1"
+    assert server.requests[2].path == "/v1/customers?email=ana%40example.com&limit=1&cursor=cus_1"
+    assert client.customers.retrieve("cus_1").emailStatus == "deliverable"
+    assert server.requests[3].path == "/v1/customers/cus_1"
+    assert client.customers.update("cus_1", {"phone": None}).phone is None
+    assert server.requests[4].method == "POST" and server.requests[4].body == {"phone": None}
+    assert [pm.id for pm in client.customers.payment_methods.list("cus_1")] == ["pm_1"]
+    assert server.requests[5].path == "/v1/customers/cus_1/payment-methods"
+    assert client.customers.delete("cus_1").deleted is True
+    assert server.requests[6].method == "DELETE" and server.requests[6].path == "/v1/customers/cus_1"
+
+
+def test_prices_create_list_retrieve_update(server: MockServer) -> None:
+    server.script([
+        Scripted(201, PRICE),
+        Scripted(200, {"items": [PRICE], "nextCursor": None}),
+        Scripted(200, PRICE),
+        Scripted(200, {**PRICE, "active": False}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    price = client.prices.create(
+        {"product": "prod_1", "unitAmountUsd": "10.00", "recurring": {"interval": "month"}}, idempotency_key="price-1"
+    )
+    assert price.recurring.interval == "month" and price.unitAmountUsd == "10.00"
+    assert server.requests[0].path == "/v1/prices" and server.requests[0].headers["idempotency-key"] == "price-1"
+    assert [p.id for p in client.prices.list({"product": "prod_1", "active": "true"})] == ["price_1"]
+    assert server.requests[1].path == "/v1/prices?product=prod_1&active=true"
+    assert client.prices.retrieve("price_1").nickname == "Monthly"
+    assert client.prices.update("price_1", {"active": False}).active is False
+    assert server.requests[3].method == "POST" and server.requests[3].path == "/v1/prices/price_1"
+
+
+def test_subscriptions_create_list_update_cancel(server: MockServer) -> None:
+    server.script([
+        Scripted(201, SUBSCRIPTION),
+        Scripted(200, {"items": [SUBSCRIPTION], "nextCursor": None}),
+        Scripted(200, SUBSCRIPTION),
+        Scripted(200, {**SUBSCRIPTION, "cancelAtPeriodEnd": True}),
+        Scripted(200, {**SUBSCRIPTION, "status": "canceled", "cancellationReason": "requested"}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    sub = client.subscriptions.create({"customer": "cus_1", "price": "price_1"}, idempotency_key="sub-1")
+    assert type(sub).__name__ == "SubscriptionResponseDto" and sub.price.id == "price_1"
+    assert server.requests[0].path == "/v1/subscriptions" and server.requests[0].headers["idempotency-key"] == "sub-1"
+    assert [s.id for s in client.subscriptions.list({"customer": "cus_1", "status": "active"})] == ["sub_1"]
+    assert server.requests[1].path == "/v1/subscriptions?customer=cus_1&status=active"
+    assert client.subscriptions.retrieve("sub_1").latestInvoice == "in_1"
+    assert client.subscriptions.update("sub_1", {"cancelAtPeriodEnd": True}).cancelAtPeriodEnd is True
+    assert server.requests[3].method == "POST" and server.requests[3].path == "/v1/subscriptions/sub_1"
+    canceled = client.subscriptions.cancel("sub_1")
+    assert canceled.status == "canceled" and canceled.cancellationReason == "requested"
+    assert server.requests[4].method == "DELETE" and server.requests[4].path == "/v1/subscriptions/sub_1"
+
+
+def test_invoices_list_retrieve_and_actions(server: MockServer) -> None:
+    server.script([
+        Scripted(200, {"items": [INVOICE], "nextCursor": None}),
+        Scripted(200, INVOICE),
+        Scripted(200, {**INVOICE, "status": "void"}),
+        Scripted(200, {**INVOICE, "status": "uncollectible"}),
+        Scripted(200, {**INVOICE, "status": "paid", "paidOutOfBand": True, "amountPaidUsd": "10.00"}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    assert [i.number for i in client.invoices.list({"subscription": "sub_1", "status": "open"})] == ["K7Q2M9XA-0001"]
+    assert server.requests[0].path == "/v1/invoices?subscription=sub_1&status=open"
+    assert client.invoices.retrieve("in_1").amountDueUsd == "10.00"
+    assert client.invoices.void("in_1", idempotency_key="void-1").status == "void"
+    assert server.requests[2].method == "POST" and server.requests[2].path == "/v1/invoices/in_1/void"
+    assert server.requests[2].headers["idempotency-key"] == "void-1"
+    assert client.invoices.mark_uncollectible("in_1").status == "uncollectible"
+    assert server.requests[3].path == "/v1/invoices/in_1/mark-uncollectible"
+    paid = client.invoices.pay("in_1", {"paidOutOfBand": True})
+    assert paid.status == "paid" and paid.paidOutOfBand is True
+    assert server.requests[4].path == "/v1/invoices/in_1/pay" and server.requests[4].body == {"paidOutOfBand": True}
+
+
+def test_setup_sessions_and_payment_methods(server: MockServer) -> None:
+    server.script([
+        Scripted(201, SETUP_SESSION),
+        Scripted(200, {**SETUP_SESSION, "url": None, "status": "complete", "paymentMethod": "pm_1"}),
+        Scripted(200, PAYMENT_METHOD),
+        Scripted(200, {**PAYMENT_METHOD, "detachedAt": "2026-10-22T00:00:00.000Z"}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    session = client.setup_sessions.create({"customer": "cus_1"}, idempotency_key="seti-1")
+    assert session.url == SETUP_SESSION["url"]
+    assert server.requests[0].path == "/v1/setup-sessions" and server.requests[0].headers["idempotency-key"] == "seti-1"
+    retrieved = client.setup_sessions.retrieve("seti_1")
+    assert retrieved.url is None and retrieved.paymentMethod == "pm_1"
+    assert server.requests[1].path == "/v1/setup-sessions/seti_1"
+    assert client.payment_methods.retrieve("pm_1").phoneLast4 == "4567"
+    assert server.requests[2].method == "GET" and server.requests[2].path == "/v1/payment-methods/pm_1"
+    assert client.payment_methods.detach("pm_1").detachedAt is not None
+    assert server.requests[3].method == "DELETE" and server.requests[3].path == "/v1/payment-methods/pm_1"
+
+
+def test_bolivar_payment_method_list_is_unchanged(server: MockServer) -> None:
+    server.script([Scripted(200, {"methods": []})])
+    client = VexPay("k", base_url=server.url)
+    with pytest.raises(pydantic.ValidationError):
+        client.payments.methods()
+    assert server.requests[-1].method == "GET" and server.requests[-1].path == "/v1/payment-methods"
+    assert not hasattr(client.payment_methods, "list")
+
+
+async def test_async_billing_resources(server: MockServer) -> None:
+    server.script([
+        Scripted(201, CUSTOMER),
+        Scripted(200, {"items": [CUSTOMER], "nextCursor": None}),
+        Scripted(200, {"items": [PAYMENT_METHOD], "nextCursor": None}),
+        Scripted(201, PRICE),
+        Scripted(200, {"items": [PRICE], "nextCursor": None}),
+        Scripted(201, SUBSCRIPTION),
+        Scripted(200, {"items": [SUBSCRIPTION], "nextCursor": None}),
+        Scripted(200, {**SUBSCRIPTION, "status": "canceled"}),
+        Scripted(200, {"items": [INVOICE], "nextCursor": None}),
+        Scripted(200, {**INVOICE, "status": "paid", "paidOutOfBand": True}),
+        Scripted(201, SETUP_SESSION),
+        Scripted(200, PAYMENT_METHOD),
+        Scripted(200, {"id": "cus_1", "deleted": True}),
+    ])
+    async with AsyncVexPay("k", base_url=server.url) as client:
+        customer = await client.customers.create({"name": "Ana Pérez"}, idempotency_key="cus-1")
+        assert customer.id == "cus_1"
+        assert server.requests[0].headers["idempotency-key"] == "cus-1"
+        page = await client.customers.list({"email": "ana@example.com"})
+        assert [c.id for c in page.items] == ["cus_1"]
+        assert [pm.id async for pm in client.customers.payment_methods.list("cus_1")] == ["pm_1"]
+        assert server.requests[2].path == "/v1/customers/cus_1/payment-methods"
+        assert (await client.prices.create({"product": "prod_1", "unitAmountUsd": "10.00"})).id == "price_1"
+        assert [p.id for p in await client.prices.list().to_list()] == ["price_1"]
+        assert (await client.subscriptions.create({"customer": "cus_1", "price": "price_1"})).status == "active"
+        assert [s.id async for s in client.subscriptions.list({"customer": "cus_1"})] == ["sub_1"]
+        assert (await client.subscriptions.cancel("sub_1")).status == "canceled"
+        assert server.requests[7].method == "DELETE"
+        assert [i.id async for i in client.invoices.list()] == ["in_1"]
+        assert (await client.invoices.pay("in_1", {"paidOutOfBand": True})).paidOutOfBand is True
+        assert server.requests[9].path == "/v1/invoices/in_1/pay"
+        assert (await client.setup_sessions.create({"customer": "cus_1"})).status == "open"
+        assert (await client.payment_methods.retrieve("pm_1")).status == "active"
+        assert (await client.customers.delete("cus_1")).deleted is True
+        assert server.requests[12].path == "/v1/customers/cus_1"
 

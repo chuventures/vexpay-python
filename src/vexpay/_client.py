@@ -49,6 +49,13 @@ class VexPay:
         self.payment_links = r.PaymentLinks(self._http)
         self.tenant_payout_account = r.TenantPayoutAccount(self._http)
         self.webhook_endpoints = r.WebhookEndpoints(self._http)
+        self.customers = r.Customers(self._http)
+        self.prices = r.Prices(self._http)
+        self.subscriptions = r.Subscriptions(self._http)
+        self.invoices = r.Invoices(self._http)
+        self.setup_sessions = r.SetupSessions(self._http)
+        #: Domiciliación payment methods (``payments.methods()`` lists the bolívar pay-in methods).
+        self.payment_methods = r.PaymentMethods(self._http)
         #: Offline helpers: ``construct_event`` verifies deliveries; no API calls.
         self.webhooks = Webhook()
 
@@ -101,6 +108,12 @@ class AsyncVexPay:
         self.payment_links = ar.AsyncPaymentLinks(self._http)
         self.tenant_payout_account = ar.AsyncTenantPayoutAccount(self._http)
         self.webhook_endpoints = ar.AsyncWebhookEndpoints(self._http)
+        self.customers = ar.AsyncCustomers(self._http)
+        self.prices = ar.AsyncPrices(self._http)
+        self.subscriptions = ar.AsyncSubscriptions(self._http)
+        self.invoices = ar.AsyncInvoices(self._http)
+        self.setup_sessions = ar.AsyncSetupSessions(self._http)
+        self.payment_methods = ar.AsyncPaymentMethods(self._http)
         self.webhooks = Webhook()
 
     async def aclose(self) -> None:
