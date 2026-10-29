@@ -668,6 +668,16 @@ class AsyncCrypto(AsyncAPIResource):
         self.networks = AsyncCryptoNetworks(self._http)
         self.payouts = AsyncCryptoPayouts(self._http)
 
+    async def simulate_deposit(
+        self, params: Union[m.SimulateDepositDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.SimulatedDepositDto:
+        """Test mode only: credit a deposit to one of your deposit addresses as if it had arrived on chain.
+
+        Sends ``payment.completed`` with ``livemode: false``. A Live key gets 403 ``test_mode_only``;
+        an address you never requested gets 404.
+        """
+        return await self._request_model("Crypto_simulateDeposit", m.SimulatedDepositDto, body=params, options=options)
+
 class AsyncCopPayments(AsyncAPIResource):
     """Colombian peso payments: PSE and Bancolombia (bank redirect), Bancolombia QR, Bre-B (QR / transfer
     key), Nequi (push approval) or Daviplata (SMS code or redirect). Cards are taken only on the hosted checkout.

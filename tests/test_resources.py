@@ -233,6 +233,21 @@ def test_usdc_payout_and_balances(server: MockServer) -> None:
     assert [b.currency for b in client.crypto.balances.list().data] == ["USDT", "USDC"]
 
 
+
+def test_simulate_deposit(server: MockServer) -> None:
+    deposit = {
+        "paymentId": "3fd84b2d-9ad1-4f74-a2d9-0f2f56984db5", "status": "COMPLETED", "method": "USDT", "currency": "USDT",
+        "amount": "40.00", "fee": "1.50", "amountUsdt": "40.00", "feeUsdt": "1.50", "network": "TRC20",
+        "customerRef": "user_123", "txHashes": [], "livemode": False, "simulated": True, "createdAt": "2026-10-29T00:00:00.000Z",
+    }
+    server.script([Scripted(201, deposit)])
+    client = VexPay("k", base_url=server.url)
+    res = client.crypto.simulate_deposit({"customerRef": "user_123", "network": "TRC20", "currency": "USDT", "amount": "40.00"})
+    assert res.simulated is True and res.livemode is False and res.fee == "1.50"
+    assert server.requests[0].method == "POST" and server.requests[0].path == "/v1/crypto/deposit-addresses/simulate"
+    assert server.requests[0].body == {"customerRef": "user_123", "network": "TRC20", "currency": "USDT", "amount": "40.00"}
+
+
 CONVERSION = {
     "id": "c0a8f6a2-1111-4b7e-9a51-0f4a1e9a0001", "object": "conversion", "status": "PENDING", "reference": None,
     "rate": "998.8299", "marketRate": "979.2450", "spreadPercent": "2.0000", "rateSource": "market",

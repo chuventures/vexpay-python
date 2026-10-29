@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.0
+
+- Test mode (sync and async): `crypto.simulate_deposit({"customerRef": ..., "network": ..., "amount": ...})` makes a deposit arrive at one of your stablecoin deposit addresses: the same payment, fee, balance hold and `payment.completed` webhook (`livemode: false`) as a real deposit. Live keys get 403 `test_mode_only`; an address you have not requested gets 404 `not_found`.
+
 ## 0.13.0
 
 - COP (sync and async): new channels `pse`, `bancolombia_transfer` and `bancolombia_qr` (and `card`, taken only on the hosted checkout). `cop.channels()` lists the channels your account can use now, the PSE banks and the terms links. `cop.payments.create` takes `pse.bankCode`, `buyer.firstName`/`lastName`/`personType` and `buyer.termsAccepted`; `next` adds `redirect` (with `url`), `redirect_pending`, `processing` and `qrSvgBase64`. Card payments carry `card` (`brand`, `last4`); `failureCode` adds `chargeback`. Refunds of channels without API refunds fail with `refund_not_supported`.

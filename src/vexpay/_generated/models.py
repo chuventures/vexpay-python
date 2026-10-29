@@ -1115,6 +1115,62 @@ class DepositAddressDto(BaseModel):
     createdAt: AwareDatetime
 
 
+class SimulateDepositDto(BaseModel):
+    customerRef: str = Field(..., examples=["user_123"])
+    """
+    The `customerRef` of a deposit address you already requested.
+    """
+    network: Literal["TRC20", "BEP20", "POLYGON", "SOL", "TON", "ARB1", "BASE"] = Field(
+        ..., examples=["TRC20"]
+    )
+    """
+    Network of that deposit address.
+    """
+    currency: Literal["USDT", "USDC"] = Field("USDT", examples=["USDT"])
+    """
+    Stablecoin of that deposit address.
+    """
+    amount: Union[str, float] = Field(..., examples=["40.00"])
+    """
+    Amount that "arrives", in `currency`: greater than 0, at most 10,000, at most 2 decimals.
+    """
+
+
+class SimulatedDepositDto(BaseModel):
+    paymentId: str
+    status: Literal["COMPLETED"] = Field(..., examples=["COMPLETED"])
+    method: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
+    currency: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
+    amount: str = Field(..., examples=["40.00"])
+    """
+    Amount received, in `currency`.
+    """
+    fee: str = Field(..., examples=["1.50"])
+    """
+    Your stablecoin fee, in `currency`. The balance is credited `amount` − `fee`.
+    """
+    amountUsdt: Optional[str] = Field(None, examples=["40.00"])
+    """
+    USDT only: same as `amount`.
+    """
+    feeUsdt: Optional[str] = Field(None, examples=["1.50"])
+    """
+    USDT only: same as `fee`.
+    """
+    network: str = Field(..., examples=["TRC20"])
+    customerRef: str = Field(..., examples=["user_123"])
+    txHashes: list[str] = Field(..., examples=[[]])
+    """
+    Always empty: nothing moved on chain.
+    """
+    livemode: bool = Field(..., examples=[False])
+    """
+    Always false: simulated deposits exist in Test mode only.
+    """
+    simulated: bool = Field(..., examples=[True])
+    createdAt: AwareDatetime
+
+
 class CryptoNetworkDto(BaseModel):
     currency: Literal["USDT", "USDC"] = Field(..., examples=["USDT"])
     network: str = Field(..., examples=["POLYGON"])

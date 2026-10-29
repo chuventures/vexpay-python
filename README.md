@@ -110,7 +110,7 @@ if any(n.receiveEnabled for n in networks):
     print(vexpay.crypto.balance.retrieve())
 ```
 
-Static deposit addresses (`crypto.deposit_addresses.create({"customerRef": "user_123", "network": "BEP20"})`) fire `payment.completed` with that `customerRef` on every deposit. Payouts (`crypto.payouts.create({... "idempotencyKey": "withdrawal-981"})`) debit amount + network fee and end in `payout.completed` (with `txHash`) or `payout.failed` (refunded). USDT `payment.completed` events add `amountUsdt`, `feeUsdt`, `network`, `txHashes` and `checkoutSession.reference`. **Don't fulfil when `underpaid` is `True`.**
+Static deposit addresses (`crypto.deposit_addresses.create({"customerRef": "user_123", "network": "BEP20"})`) fire `payment.completed` with that `customerRef` on every deposit. With a Test key, `crypto.simulate_deposit({"customerRef": "user_123", "network": "BEP20", "amount": "40.00"})` makes a deposit arrive at that address (same payment, fee and webhook, `livemode: false`). Payouts (`crypto.payouts.create({... "idempotencyKey": "withdrawal-981"})`) debit amount + network fee and end in `payout.completed` (with `txHash`) or `payout.failed` (refunded). USDT `payment.completed` events add `amountUsdt`, `feeUsdt`, `network`, `txHashes` and `checkoutSession.reference`. **Don't fulfil when `underpaid` is `True`.**
 
 ### USDC
 
@@ -397,6 +397,7 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `payments.pago_movil` | `verify` |
 | `payments.debit` · `credit` · `operations` · `dispersals` · `change` | débito/crédito inmediato and disbursements (advanced payments) |
 | `checkout.sessions` | `create`, `retrieve` |
+| `crypto` | `simulate_deposit` (Test mode only) |
 | `crypto.balance` | `retrieve` |
 | `crypto.balances` | `list` |
 | `crypto.deposit_addresses` | `create` |
