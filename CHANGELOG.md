@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.0
+
+- COP (sync and async): new channels `pse`, `bancolombia_transfer` and `bancolombia_qr` (and `card`, taken only on the hosted checkout). `cop.channels()` lists the channels your account can use now, the PSE banks and the terms links. `cop.payments.create` takes `pse.bankCode`, `buyer.firstName`/`lastName`/`personType` and `buyer.termsAccepted`; `next` adds `redirect` (with `url`), `redirect_pending`, `processing` and `qrSvgBase64`. Card payments carry `card` (`brand`, `last4`); `failureCode` adds `chargeback`. Refunds of channels without API refunds fail with `refund_not_supported`.
+- Disbursements (sync and async): `merchants.transfer(id, {...})` credits a seller from your balance (`amountUsd` converted at the official BCV rate, or `amountVes`; `transferKey` makes it idempotent). `merchants.list_transactions(id)` (auto-paginates), `merchants.retrieve_statement(id, {"month": "YYYY-MM"})` and `retrieve_statement_csv`. Payout webhooks report `feePaidByTenant` and `feeVes` when your balance pays a disbursement's withdrawal fee.
+- Balance top-ups (sync and async): `balance.topups.create / list / retrieve / instant / simulate` load your own Bs balance by Pago Móvil. Enabled per account (`topups_not_enabled`); monthly limit `topup_cap_exceeded`. New balance transaction types `topup`, `topup_fee`, `topup_instant_release`, `topup_instant_fee`.
+
 ## 0.12.0
 
 - Billing (sync and async): `customers` (`create`, `list`, `retrieve`, `update`, `delete`), `customers.payment_methods.list(customer_id)`, `prices` (`create`, `list`, `retrieve`, `update`), `subscriptions` (`create`, `list`, `retrieve`, `update`, `cancel`), `invoices` (`list`, `retrieve`, `void`, `mark_uncollectible`, `pay`), `setup_sessions` (`create`, `retrieve`) for domiciliación authorization links, and `payment_methods` (`retrieve`, `detach`). Lists auto-paginate; creates and invoice actions accept `idempotency_key`. `payments.methods()` (the bolívar pay-in methods, `GET /v1/payment-methods`) is unchanged.

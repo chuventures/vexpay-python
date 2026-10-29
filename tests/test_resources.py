@@ -11,7 +11,7 @@ from typing import Any, Optional, Union
 import pydantic
 import pytest
 
-from vexpay import AsyncPage, AsyncVexPay, InvalidRequestError, SyncPage, VexPay
+from vexpay import AsyncPage, AsyncVexPay, ConflictError, InvalidRequestError, SyncPage, VexPay
 from vexpay._generated.routes import RESPONSE_MODELS, ROUTES
 from vexpay._resource import AsyncAPIResource, SyncAPIResource
 
@@ -325,6 +325,30 @@ def test_cop_payment_otp_cancel_refund_and_balance(server: MockServer) -> None:
     assert server.requests[5].path == "/v1/cop/balance"
 
 
+def test_cop_channels_then_pse_redirect(server: MockServer) -> None:
+    server.script([
+        Scripted(200, {
+            "channels": [{"channel": "pse", "label": "PSE", "needsBuyer": True, "needsTermsAcceptance": True, "checkoutOnly": False, "minAmountCop": 20000}],
+            "pseBanks": [{"code": "1007", "name": "Bancolombia"}],
+            "terms": {"termsUrl": "https://t", "personalDataUrl": "https://d"},
+        }),
+        Scripted(201, {**COP_PAYMENT, "channel": "pse", "next": {"type": "redirect", "url": "https://bank.example/pse"}}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    catalog = client.cop.channels()
+    assert server.requests[0].path == "/v1/cop/channels"
+    assert catalog.channels[0].needsTermsAcceptance is True
+    assert catalog.pseBanks is not None and catalog.pseBanks[0].code == "1007"
+    buyer = {
+        "firstName": "Juan", "lastName": "Pérez", "personType": "natural", "email": "juan@example.com",
+        "phone": "3001234567", "documentType": "CC", "documentNumber": "1234567890", "termsAccepted": True,
+    }
+    payment = client.cop.payments.create({"amountCop": 80000, "channel": "pse", "pse": {"bankCode": "1007"}, "buyer": buyer})
+    assert payment.next is not None and payment.next.type == "redirect" and payment.next.url == "https://bank.example/pse"
+    assert server.requests[1].body["pse"] == {"bankCode": "1007"}
+    assert server.requests[1].body["buyer"]["termsAccepted"] is True
+
+
 # ── billing ───────────────────────────────────────────────────────────────────
 
 CUSTOMER = {
@@ -525,3 +549,146 @@ async def test_async_billing_resources(server: MockServer) -> None:
         assert (await client.customers.delete("cus_1")).deleted is True
         assert server.requests[12].path == "/v1/customers/cus_1"
 
+
+
+MERCHANT_ID = "5e0c7b1a-3333-4b7e-9a51-0f4a1e9a0003"
+SELLER_BALANCE = {
+    "merchantId": MERCHANT_ID, "accountId": "acct_1", "tenantId": "5e0c7b1a-4444-4b7e-9a51-0f4a1e9a0004",
+    "pendingVes": "21540.00", "availableVes": "0.00", "paidOutVes": "0.00", "ledgerNetVes": "21540.00",
+}
+TRANSFER = {
+    "transferKey": "q1-nov-u1", "amountVes": "21540.00", "amountUsd": "100.00", "rate": "215.4000",
+    "rateSource": "bcv", "rateAsOf": "2026-11-03T00:00:00.000Z",
+}
+
+
+def _movement(movement_id: str) -> dict[str, Any]:
+    return {
+        "id": movement_id, "type": "credit", "amountVes": "21540.00", "description": "Credit",
+        "transferKey": "q1-nov-u1", "amountUsd": "100.00", "rate": "215.4000", "rateSource": "bcv",
+        "createdAt": "2026-11-03T12:00:00.000Z",
+    }
+
+
+STATEMENT = {
+    "merchantId": MERCHANT_ID, "month": "2026-11", "from": "2026-11-01T04:00:00.000Z",
+    "to": "2026-12-01T04:00:00.000Z", "openingVes": "0.00", "closingVes": "21540.00", "movements": [_movement("m1")],
+}
+STATEMENT_CSV = "date,type,amountVes,balanceVes\n2026-11-03T12:00:00.000Z,credit,21540.00,21540.00\n"
+
+
+def test_merchant_usd_transfer_transactions_and_statement(server: MockServer) -> None:
+    server.script([
+        Scripted(200, {**SELLER_BALANCE, "transfer": TRANSFER}),
+        Scripted(200, {"items": [_movement("m1"), _movement("m2")], "nextCursor": "c2"}),
+        Scripted(200, {"items": [_movement("m3")], "nextCursor": None}),
+        Scripted(200, STATEMENT),
+        Scripted(200, STATEMENT_CSV, headers={"content-type": "text/csv"}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    result = client.merchants.transfer(MERCHANT_ID, {"amountUsd": "100.00", "transferKey": "q1-nov-u1"})
+    assert result.transfer.amountVes == "21540.00" and result.transfer.rate == "215.4000"
+    assert result.pendingVes == "21540.00"
+    assert server.requests[0].path == f"/v1/merchants/{MERCHANT_ID}/transfers"
+    assert server.requests[0].body == {"amountUsd": "100.00", "transferKey": "q1-nov-u1"}
+
+    ids = [mv.id for mv in client.merchants.list_transactions(MERCHANT_ID, {"limit": 2})]
+    assert ids == ["m1", "m2", "m3"]
+    assert server.requests[1].path == f"/v1/merchants/{MERCHANT_ID}/transactions?limit=2"
+    assert server.requests[2].path == f"/v1/merchants/{MERCHANT_ID}/transactions?limit=2&cursor=c2"
+
+    statement = client.merchants.retrieve_statement(MERCHANT_ID, {"month": "2026-11"})
+    assert statement.closingVes == "21540.00" and len(statement.movements) == 1
+    assert server.requests[3].path == f"/v1/merchants/{MERCHANT_ID}/statement?month=2026-11&format=json"
+
+    assert client.merchants.retrieve_statement_csv(MERCHANT_ID, {"month": "2026-11"}) == STATEMENT_CSV
+    assert server.requests[4].path == f"/v1/merchants/{MERCHANT_ID}/statement?month=2026-11&format=csv"
+
+
+async def test_async_merchant_transactions_and_statement(server: MockServer) -> None:
+    server.script([
+        Scripted(200, {"items": [_movement("m1")], "nextCursor": None}),
+        Scripted(200, STATEMENT),
+        Scripted(200, STATEMENT_CSV),
+    ])
+    async with AsyncVexPay("k", base_url=server.url) as client:
+        assert [mv.id async for mv in client.merchants.list_transactions(MERCHANT_ID)] == ["m1"]
+        assert (await client.merchants.retrieve_statement(MERCHANT_ID, {"month": "2026-11"})).openingVes == "0.00"
+        assert await client.merchants.retrieve_statement_csv(MERCHANT_ID, {"month": "2026-11"}) == STATEMENT_CSV
+
+
+TOPUP = {
+    "id": "tp_1", "status": "pending", "amountVes": "100000.00", "amountUsd": "500.00", "bcvRate": "200.0000",
+    "feePercent": "3.5000", "feeFixedUsd": "0.25", "feeVes": None, "creditedVes": None,
+    "sourceNote": "Ingresos publicidad quincena 2", "payerPhone": "04121234567", "bankReference": None,
+    "expiresAt": "2026-10-28T00:15:00.000Z", "completedAt": None, "availableAt": None, "heldVes": "0.00",
+    "instantFeePercent": "1.5000", "instantFeeVes": "0.00", "instantReleasedAt": None,
+    "receiver": {"bankCode": "0169", "phone": "04140000000", "identification": "J-000000000"},
+    "test": True, "createdAt": "2026-10-28T00:00:00.000Z",
+}
+TOPUP_COMPLETED = {
+    **TOPUP, "status": "completed", "feeVes": "3550.00", "creditedVes": "96450.00", "bankReference": "123456",
+    "completedAt": "2026-10-28T00:05:00.000Z", "availableAt": "2026-10-29T00:05:00.000Z", "heldVes": "96450.00",
+    "instantFeeVes": "1446.75", "receiver": None,
+}
+TOPUP_LIST = {"data": [TOPUP], "monthlyCapUsd": "3000.00", "monthUsedUsd": "500.00", "monthRemainingUsd": "2500.00"}
+CREATE_TOPUP = {
+    "amountVes": "100000.00", "payerPhone": "04121234567", "payerCedula": "V12345678",
+    "sourceNote": "Ingresos publicidad quincena 2",
+}
+
+
+def test_balance_topups(server: MockServer) -> None:
+    released = {**TOPUP_COMPLETED, "heldVes": "0.00", "availableAt": None, "instantReleasedAt": "2026-10-28T00:06:00.000Z"}
+    server.script([
+        Scripted(201, TOPUP),
+        Scripted(200, TOPUP_LIST),
+        Scripted(200, TOPUP),
+        Scripted(200, TOPUP_COMPLETED),
+        Scripted(200, released),
+    ])
+    client = VexPay("k", base_url=server.url)
+    created = client.balance.topups.create(CREATE_TOPUP, idempotency_key="tp-1")
+    assert created.receiver is not None and created.receiver.bankCode == "0169"
+    assert (server.requests[0].method, server.requests[0].path) == ("POST", "/v1/balance/topups")
+    assert server.requests[0].headers["idempotency-key"] == "tp-1"
+    assert server.requests[0].body == CREATE_TOPUP
+
+    listed = client.balance.topups.list({"limit": 5})
+    assert [t.id for t in listed.data] == ["tp_1"] and listed.monthRemainingUsd == "2500.00"
+    assert server.requests[1].path == "/v1/balance/topups?limit=5"
+
+    assert client.balance.topups.retrieve("tp_1").id == "tp_1"
+    assert (server.requests[2].method, server.requests[2].path) == ("GET", "/v1/balance/topups/tp_1")
+    assert client.balance.topups.simulate("tp_1").status == "completed"
+    assert (server.requests[3].method, server.requests[3].path) == ("POST", "/v1/balance/topups/tp_1/simulate")
+    assert client.balance.topups.instant("tp_1").heldVes == "0.00"
+    assert (server.requests[4].method, server.requests[4].path) == ("POST", "/v1/balance/topups/tp_1/instant")
+
+
+def test_balance_topup_errors(server: MockServer) -> None:
+    server.script([
+        Scripted(409, {"error": "not_held", "message": "Nothing held"}),
+        Scripted(422, {
+            "error": "topup_cap_exceeded", "message": "Over the monthly limit",
+            "capUsd": "3000.00", "usedUsd": "500.00", "remainingUsd": "2500.00", "remainingVes": "500000.00",
+        }),
+    ])
+    client = VexPay("k", base_url=server.url, max_network_retries=0)
+    with pytest.raises(ConflictError) as conflict:
+        client.balance.topups.instant("tp_2")
+    assert conflict.value.code == "not_held"
+    with pytest.raises(InvalidRequestError) as capped:
+        client.balance.topups.create({**CREATE_TOPUP, "amountVes": "999999999.00"})
+    assert capped.value.code == "topup_cap_exceeded" and capped.value.status == 422
+    assert capped.value.body["remainingVes"] == "500000.00"
+
+
+async def test_async_balance_topups(server: MockServer) -> None:
+    server.script([Scripted(201, TOPUP), Scripted(200, TOPUP_LIST), Scripted(200, TOPUP_COMPLETED)])
+    async with AsyncVexPay("k", base_url=server.url) as client:
+        assert (await client.balance.topups.create(CREATE_TOPUP)).status == "pending"
+        assert (await client.balance.topups.list()).monthlyCapUsd == "3000.00"
+        assert server.requests[1].path == "/v1/balance/topups"
+        assert (await client.balance.topups.instant("tp_1")).creditedVes == "96450.00"
+        assert server.requests[2].path == "/v1/balance/topups/tp_1/instant"

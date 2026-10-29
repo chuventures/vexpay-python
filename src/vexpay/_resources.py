@@ -310,11 +310,48 @@ class Merchants(SyncAPIResource):
 
     def transfer(
         self, id: str, params: Union[m.CreateMerchantTransferDto, Params], **options: Unpack[RequestOptions]
-    ) -> m.MerchantBalanceDto:
-        """Move VES between this merchant's balance and another."""
+    ) -> m.MerchantTransferResponseDto:
+        """Credit this seller's pending balance from your platform balance.
+
+        Send ``amountVes``, or ``amountUsd`` to convert at the official BCV rate (503 ``rate_unavailable``
+        when no rate can be read); ``transferKey`` makes it idempotent. Returns the seller balance plus
+        ``transfer`` (the amounts and rate used)."""
         return self._request_model(
-            "Merchants_transfer", m.MerchantBalanceDto, path={"id": id}, body=params, options=options
+            "Merchants_transfer", m.MerchantTransferResponseDto, path={"id": id}, body=params, options=options
         )
+
+    def list_transactions(
+        self, id: str, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.MerchantMovementListDto, m.MerchantMovementDto]:
+        """Seller balance movements, newest first; iterate the result for every movement."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Merchants_listTransactions",
+                m.MerchantMovementListDto,
+                path={"id": id},
+                query={**query, "cursor": cursor},
+                options=options,
+            ),
+            query.get("cursor"),
+        )
+
+    def retrieve_statement(self, id: str, params: Params, **options: Unpack[RequestOptions]) -> m.MerchantStatementDto:
+        """Monthly statement, e.g. ``{"month": "2026-11"}`` (America/Caracas): opening, movements, closing."""
+        return self._request_model(
+            "Merchants_statement",
+            m.MerchantStatementDto,
+            path={"id": id},
+            query={**params, "format": "json"},
+            options=options,
+        )
+
+    def retrieve_statement_csv(self, id: str, params: Params, **options: Unpack[RequestOptions]) -> str:
+        """The same monthly statement as CSV (with a running balance column)."""
+        body = self._request_json(
+            "Merchants_statement", path={"id": id}, query={**params, "format": "csv"}, options=options
+        )
+        return body if isinstance(body, str) else ""
 
     def list_audit_events(self, id: str, **options: Unpack[RequestOptions]) -> m.MerchantAuditEventListDto:
         return self._request_model(
@@ -468,10 +505,39 @@ class BalanceTransactions(SyncAPIResource):
         )
 
 
+class BalanceTopups(SyncAPIResource):
+    """Load your own Bs balance by Pago Móvil (money that is not a sale). Enabled per account.
+
+    Send the exact ``amountVes`` from ``payerPhone`` to the returned ``receiver`` before ``expiresAt``; the
+    top-up completes when the transfer arrives. Each top-up needs a ``sourceNote`` and counts against your
+    monthly limit (``topup_cap_exceeded``, 422).
+    """
+
+    def create(self, params: Union[m.CreateTopupDto, Params], **options: Unpack[RequestOptions]) -> m.TopupDto:
+        return self._request_model("Topups_create", m.TopupDto, body=params, options=options)
+
+    def list(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> m.TopupListDto:
+        """Your latest top-ups (newest first, ``limit`` 1–100) plus this month's limit usage."""
+        return self._request_model("Topups_list", m.TopupListDto, query=params or {}, options=options)
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.TopupDto:
+        return self._request_model("Topups_get", m.TopupDto, path={"id": id}, options=options)
+
+    def instant(self, id: str, **options: Unpack[RequestOptions]) -> m.TopupDto:
+        """Release the still-held part of a completed top-up now, for ``instantFeeVes``. Idempotent;
+        ``not_held`` (409) when nothing is held."""
+        return self._request_model("Topups_instant", m.TopupDto, path={"id": id}, options=options)
+
+    def simulate(self, id: str, **options: Unpack[RequestOptions]) -> m.TopupDto:
+        """Test mode only: complete the top-up as if the Pago Móvil arrived."""
+        return self._request_model("Topups_simulate", m.TopupDto, path={"id": id}, options=options)
+
+
 class Balance(SyncAPIResource):
     def __init__(self, http: Any) -> None:
         super().__init__(http)
         self.transactions = BalanceTransactions(self._http)
+        self.topups = BalanceTopups(self._http)
 
     def retrieve(self, **options: Unpack[RequestOptions]) -> m.PlatformBalanceDto:
         return self._request_model("Balance_getBalance", m.PlatformBalanceDto, options=options)
@@ -604,7 +670,8 @@ class Crypto(SyncAPIResource):
         self.payouts = CryptoPayouts(self._http)
 
 class CopPayments(SyncAPIResource):
-    """Colombian peso payments: Bre-B (QR / transfer key), Nequi (push approval) or Daviplata (SMS code).
+    """Colombian peso payments: PSE and Bancolombia (bank redirect), Bancolombia QR, Bre-B (QR / transfer
+    key), Nequi (push approval) or Daviplata (SMS code or redirect). Cards are taken only on the hosted checkout.
 
     Payments complete asynchronously — listen for ``payment.completed`` / ``payment.failed``.
     COP must be enabled on your account (403 ``method_not_allowed`` otherwise).
@@ -613,9 +680,11 @@ class CopPayments(SyncAPIResource):
     def create(
         self, params: Union[m.CreateCopPaymentDto, Params], **options: Unpack[RequestOptions]
     ) -> m.CopPaymentDto:
-        """Create a payment in whole pesos; ``buyer`` is required for ``nequi`` and ``daviplata``.
+        """Create a payment in whole pesos; ``buyer`` is required for every channel except ``breb``.
 
-        ``next.type`` says what the buyer does: ``show_qr``, ``approve_in_app`` or ``submit_otp``.
+        Send ``buyer.termsAccepted: true`` when ``cop.channels()`` says ``needsTermsAcceptance``; ``pse`` also
+        needs ``pse.bankCode``. ``next.type`` says what the buyer does: ``show_qr``, ``approve_in_app``,
+        ``submit_otp``, ``redirect`` (send them to ``next.url``) or ``redirect_pending`` (retrieve again shortly).
         Pass ``idempotency_key`` to retry safely.
         """
         return self._request_model("CopPayments_create", m.CopPaymentDto, body=params, options=options)
@@ -626,7 +695,7 @@ class CopPayments(SyncAPIResource):
     def submit_otp(
         self, id: str, params: Union[m.SubmitCopOtpDto, Params], **options: Unpack[RequestOptions]
     ) -> m.CopPaymentDto:
-        """Daviplata: submit the code the buyer received by SMS. A wrong code fails with ``invalid_otp``."""
+        """Daviplata with ``next.type == "submit_otp"``: submit the SMS code. A wrong code fails with ``invalid_otp``."""
         return self._request_model("CopPayments_submitOtp", m.CopPaymentDto, path={"id": id}, body=params, options=options)
 
     def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.CopPaymentDto:
@@ -634,7 +703,10 @@ class CopPayments(SyncAPIResource):
         return self._request_model("CopPayments_cancel", m.CopPaymentDto, path={"id": id}, options=options)
 
     def refund(self, id: str, **options: Unpack[RequestOptions]) -> m.CopPaymentDto:
-        """Full refund of a completed payment, within 96 hours."""
+        """Full refund of a completed payment (card within 24 h, Bre-B within 96 h).
+
+        Channels that cannot be refunded through the API fail with ``refund_not_supported``.
+        """
         return self._request_model("CopPayments_refund", m.CopPaymentDto, path={"id": id}, options=options)
 
 
@@ -646,12 +718,16 @@ class CopBalance(SyncAPIResource):
 
 
 class Cop(SyncAPIResource):
-    """Collect Colombian pesos (Bre-B, Nequi, Daviplata)."""
+    """Collect Colombian pesos (PSE, Bancolombia, Bre-B, Nequi, Daviplata; cards via the hosted checkout)."""
 
     def __init__(self, http: Any) -> None:
         super().__init__(http)
         self.payments = CopPayments(self._http)
         self.balance = CopBalance(self._http)
+
+    def channels(self, **options: Unpack[RequestOptions]) -> m.CopChannelsDto:
+        """Channels you can use right now, with what each needs, plus the PSE banks and terms links."""
+        return self._request_model("CopPayments_channels", m.CopChannelsDto, options=options)
 
 
 class ConversionQuotes(SyncAPIResource):

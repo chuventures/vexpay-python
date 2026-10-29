@@ -92,6 +92,12 @@ class BalanceTransactionDto(BaseModel):
         "conversion",
         "conversion_reversal",
         "merchant_payout_fee",
+        "disbursement_payout_fee",
+        "disbursement_payout_fee_reversal",
+        "topup",
+        "topup_fee",
+        "topup_instant_release",
+        "topup_instant_fee",
     ] = Field(..., examples=["chargeback"])
     amountVes: str = Field(..., examples=["-4000.00"])
     """
@@ -370,7 +376,11 @@ class PayoutResponseDto(BaseModel):
     """
     feeVes: Optional[str] = Field(None, examples=["2.50"])
     """
-    Platform fee in VES retained on instant tenant credits.
+    Platform fee in VES: retained on instant tenant credits, or the end-user withdrawal fee on a disbursement payout (see feePayer).
+    """
+    feePayer: Optional[Literal["tenant"]] = Field(None, examples=["tenant"])
+    """
+    Set to "tenant" when your balance paid feeVes (disbursement withdrawal fee): the end user was debited only monto.
     """
     concepto: Optional[str] = None
     bankCode: Optional[str] = Field(None, examples=["0134"])
@@ -443,7 +453,11 @@ class PayoutBatchItemResultDto(BaseModel):
     """
     feeVes: Optional[str] = Field(None, examples=["2.50"])
     """
-    Platform fee in VES retained on instant tenant credits.
+    Platform fee in VES: retained on instant tenant credits, or the end-user withdrawal fee on a disbursement payout (see feePayer).
+    """
+    feePayer: Optional[Literal["tenant"]] = Field(None, examples=["tenant"])
+    """
+    Set to "tenant" when your balance paid feeVes (disbursement withdrawal fee): the end user was debited only monto.
     """
     concepto: Optional[str] = None
     bankCode: Optional[str] = Field(None, examples=["0134"])
@@ -1201,12 +1215,69 @@ class CryptoPayoutDto(BaseModel):
     completedAt: Optional[AwareDatetime] = None
 
 
+class CopChannelDto(BaseModel):
+    channel: Literal[
+        "breb",
+        "nequi",
+        "daviplata",
+        "card",
+        "pse",
+        "bancolombia_transfer",
+        "bancolombia_qr",
+    ] = Field(..., examples=["pse"])
+    label: str = Field(..., examples=["PSE"])
+    """
+    Buyer-facing name (Spanish).
+    """
+    needsBuyer: bool = Field(..., examples=[True])
+    """
+    A `buyer` object is required.
+    """
+    needsTermsAcceptance: bool = Field(..., examples=[True])
+    """
+    Show the buyer the `terms` links and send `buyer.termsAccepted: true`.
+    """
+    checkoutOnly: bool = Field(..., examples=[False])
+    """
+    Only through the hosted checkout (checkout sessions or payment links), never `POST /v1/cop/payments`.
+    """
+    minAmountCop: float = Field(..., examples=[20000])
+
+
+class CopPseBankDto(BaseModel):
+    code: str = Field(..., examples=["1007"])
+    name: str = Field(..., examples=["Bancolombia"])
+
+
+class CopTermsDto(BaseModel):
+    termsUrl: str
+    """
+    Terms and conditions the buyer accepts.
+    """
+    personalDataUrl: str
+    """
+    Personal data processing authorization the buyer accepts.
+    """
+
+
+class CopChannelsDto(BaseModel):
+    channels: list[CopChannelDto]
+    pseBanks: Optional[list[CopPseBankDto]] = None
+    """
+    Present when `pse` is listed: banks for `pse.bankCode`.
+    """
+    terms: Optional[CopTermsDto] = None
+    """
+    Present when a listed channel needs terms acceptance.
+    """
+
+
 class CopBuyerDto(BaseModel):
     firstName: Optional[str] = Field(None, examples=["Juan"], max_length=50)
     lastName: Optional[str] = Field(None, examples=["Pérez"], max_length=50)
     email: Optional[str] = Field(None, examples=["juan@example.com"])
     """
-    Required for Nequi and Daviplata.
+    Required for every channel except `breb`.
     """
     phone: Optional[str] = Field(None, examples=["3001234567"])
     """
@@ -1220,7 +1291,24 @@ class CopBuyerDto(BaseModel):
     """
     documentNumber: Optional[str] = Field(None, examples=["1234567890"])
     """
-    National document number. Required for Nequi and Daviplata.
+    National document number. Required for every channel except `breb`.
+    """
+    personType: Optional[Literal["natural", "juridica"]] = Field(
+        None, examples=["natural"]
+    )
+    """
+    PSE only (required): `natural` person or `juridica` (company).
+    """
+    termsAccepted: Optional[bool] = Field(None, examples=[True])
+    """
+    Required (`true`) for channels the channel catalog marks `needsTermsAcceptance`: confirms you showed the buyer the catalog `terms` links.
+    """
+
+
+class CopPseDto(BaseModel):
+    bankCode: str = Field(..., examples=["1007"])
+    """
+    Bank code from `GET /v1/cop/channels` → `pseBanks`.
     """
 
 
@@ -1229,9 +1317,17 @@ class CreateCopPaymentDto(BaseModel):
     """
     Amount in whole Colombian pesos. At least 2,000 (`amount_below_minimum` otherwise).
     """
-    channel: Literal["breb", "nequi", "daviplata"] = Field(..., examples=["breb"])
+    channel: Literal[
+        "breb",
+        "nequi",
+        "daviplata",
+        "card",
+        "pse",
+        "bancolombia_transfer",
+        "bancolombia_qr",
+    ] = Field(..., examples=["breb"])
     """
-    `breb`: QR code / transfer key the buyer pays from any Colombian bank app. `nequi`: push to the buyer's Nequi app. `daviplata`: SMS code the buyer reads to you.
+    `breb`: QR code / transfer key the buyer pays from any Colombian bank app. `nequi`: push to the buyer's Nequi app. `daviplata`: SMS code the buyer reads to you, or a redirect. `pse` and `bancolombia_transfer`: redirect to the buyer's bank. `bancolombia_qr`: QR the buyer scans in the Bancolombia app. `card`: hosted checkout only (`channel_requires_checkout`).
     """
     description: Optional[str] = Field(None, examples=["Order 1042"], max_length=255)
     """
@@ -1247,15 +1343,37 @@ class CreateCopPaymentDto(BaseModel):
     """
     buyer: Optional[CopBuyerDto] = None
     """
-    Required for `nequi` and `daviplata`; optional for `breb`.
+    Required for every channel except `breb`.
+    """
+    pse: Optional[CopPseDto] = None
+    """
+    Required for `pse`.
     """
 
 
 class CopNextActionDto(BaseModel):
-    type: Literal["show_qr", "approve_in_app", "submit_otp"]
+    type: Literal[
+        "show_qr",
+        "approve_in_app",
+        "submit_otp",
+        "redirect",
+        "redirect_pending",
+        "processing",
+    ]
+    """
+    `redirect`: send the buyer to `url` to authorize at their bank. `redirect_pending`: the URL is not ready yet — read the payment again. `processing`: nothing to do, the outcome follows.
+    """
     qrPngBase64: Optional[str] = None
     """
     Bre-B: base64 PNG of the payment QR. Returned only when the payment is created.
+    """
+    qrSvgBase64: Optional[str] = None
+    """
+    Bancolombia QR: base64 SVG of the payment QR.
+    """
+    url: Optional[str] = Field(None, examples=["https://…"])
+    """
+    `redirect`: where the buyer authorizes the payment.
     """
     transferKey: Optional[str] = None
     """
@@ -1271,7 +1389,15 @@ class CopPaymentDto(BaseModel):
     id: str
     status: Literal["pending", "completed", "failed", "canceled", "refunded"]
     method: Literal["COP"]
-    channel: Literal["breb", "nequi", "daviplata"]
+    channel: Literal[
+        "breb",
+        "nequi",
+        "daviplata",
+        "card",
+        "pse",
+        "bancolombia_transfer",
+        "bancolombia_qr",
+    ]
     amountCop: float = Field(..., examples=[100000])
     feeCop: Optional[float] = Field(None, examples=[3500])
     """
@@ -1288,14 +1414,25 @@ class CopPaymentDto(BaseModel):
     reference: Optional[str] = Field(None, examples=["order-1042"])
     metadata: dict[str, str]
     failureCode: Optional[
-        Literal["expired", "rejected", "processor_error", "processor_unknown"]
+        Literal[
+            "expired", "rejected", "processor_error", "processor_unknown", "chargeback"
+        ]
     ] = None
+    """
+    `chargeback`: a refunded card payment the buyer disputed with their bank.
+    """
     expiresAt: Optional[AwareDatetime] = None
     createdAt: AwareDatetime
     completedAt: Optional[AwareDatetime] = None
     next: Optional[CopNextActionDto] = None
     """
-    What the buyer must do next. Returned when the payment is created.
+    What the buyer must do next. Returned when the payment is created, and on reads while a bank redirect or QR is pending.
+    """
+    card: Optional[dict[str, Any]] = Field(
+        None, examples=[{"brand": "VISA", "last4": "4242"}]
+    )
+    """
+    Card payments: brand and last 4 digits, once known.
     """
 
 
@@ -2190,9 +2327,13 @@ class ConfirmMerchantVerifyDto(BaseModel):
 
 
 class CreateMerchantTransferDto(BaseModel):
-    amountVes: str = Field(..., examples=["1523.40"])
+    amountVes: Optional[str] = Field(None, examples=["1523.40"])
     """
-    Exact two-decimal VES amount to move from platform float → seller pending.
+    Exact two-decimal VES amount to move from platform float → seller pending. Send this or `amountUsd`, not both.
+    """
+    amountUsd: Optional[str] = Field(None, examples=["100.00"])
+    """
+    Exact two-decimal USD amount, converted to VES at the official BCV rate at the time of the request (regardless of your account’s Bolívar rate setting). The rate is saved with the transfer and a replay returns it. Send this or `amountVes`, not both.
     """
     transferKey: str = Field(..., examples=["xfer_bid_1042"], max_length=64)
     """
@@ -2201,6 +2342,123 @@ class CreateMerchantTransferDto(BaseModel):
     paymentId: Optional[str] = None
     """
     Optional funding payment correlation (does not enforce remaining-net).
+    """
+
+
+class MerchantTransferSnapshotDto(BaseModel):
+    transferKey: str = Field(..., examples=["q1-nov-2026-u123"])
+    amountVes: str = Field(..., examples=["21540.00"])
+    """
+    VES credited to the merchant.
+    """
+    amountUsd: Optional[str] = Field(None, examples=["100.00"])
+    """
+    USD transfers only: the USD amount requested.
+    """
+    rate: Optional[str] = Field(None, examples=["215.4000"])
+    """
+    USD transfers only: the BCV rate used.
+    """
+    rateSource: Optional[str] = Field(None, examples=["bcv"])
+    """
+    USD transfers only: always `bcv`.
+    """
+    rateAsOf: Optional[AwareDatetime] = None
+    """
+    USD transfers only: when the rate was read.
+    """
+
+
+class MerchantTransferResponseDto(BaseModel):
+    merchantId: str
+    accountId: str = Field(..., examples=["acct_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    tenantId: str
+    pendingVes: str = Field(..., examples=["100.00"])
+    availableVes: str = Field(..., examples=["250.00"])
+    paidOutVes: str = Field(..., examples=["50.00"])
+    ledgerNetVes: str = Field(..., examples=["350.00"])
+    cop: Optional[MerchantCopBalanceDto] = None
+    """
+    COP balances from COP sales on seller links. Present only once the seller has COP activity.
+    """
+    transfer: MerchantTransferSnapshotDto
+    """
+    What this transfer credited (the original values on a replay).
+    """
+
+
+class MerchantMovementDto(BaseModel):
+    id: str
+    type: Literal[
+        "credit",
+        "release",
+        "reversal",
+        "payout",
+        "payout_reversal",
+        "payout_fee",
+        "payout_fee_reversal",
+        "adjustment",
+    ] = Field(..., examples=["credit"])
+    amountVes: str = Field(..., examples=["21540.00"])
+    """
+    Signed change of the total balance (pending + available). A `release` row is 0.00.
+    """
+    releasedVes: Optional[str] = Field(None, examples=["21540.00"])
+    """
+    `release` rows only: VES moved from pending to available (negative = put back on hold).
+    """
+    description: str = Field(..., examples=["Credit"])
+    transferKey: Optional[str] = Field(None, examples=["q1-nov-u1"])
+    """
+    `credit` rows: the transferKey you sent.
+    """
+    paymentId: Optional[str] = None
+    payoutId: Optional[str] = None
+    availableAt: Optional[AwareDatetime] = None
+    """
+    `credit` rows: when the credit becomes withdrawable.
+    """
+    amountUsd: Optional[str] = Field(None, examples=["100.00"])
+    """
+    Credits sent with `amountUsd`: the USD amount.
+    """
+    rate: Optional[str] = Field(None, examples=["215.4000"])
+    """
+    Credits sent with `amountUsd`: the rate used.
+    """
+    rateSource: Optional[str] = Field(None, examples=["bcv"])
+    createdAt: AwareDatetime
+
+
+class MerchantMovementListDto(BaseModel):
+    items: list[MerchantMovementDto]
+    nextCursor: Optional[str] = Field(...)
+    """
+    Pass as `cursor` for the next (older) page; null on the last page.
+    """
+
+
+class MerchantStatementDto(BaseModel):
+    merchantId: str
+    month: str = Field(..., examples=["2026-11"])
+    from_: AwareDatetime = Field(
+        ..., alias="from", examples=["2026-11-01T04:00:00.000Z"]
+    )
+    """
+    Month start, America/Caracas.
+    """
+    to: AwareDatetime = Field(..., examples=["2026-12-01T04:00:00.000Z"])
+    """
+    Month end (exclusive), America/Caracas.
+    """
+    openingVes: str = Field(..., examples=["0.00"])
+    closingVes: str = Field(..., examples=["21800.00"])
+    """
+    openingVes + Σ movements[].amountVes.
+    """
+    movements: list[MerchantMovementDto]
+    """
+    Oldest first.
     """
 
 
@@ -2390,6 +2648,93 @@ class UpdatePaymentLinkDto(BaseModel):
     allowQuantity: Optional[bool] = None
     maxQuantity: Optional[float] = Field(None, ge=1.0, le=999.0)
     redirectUrl: Optional[str] = None
+
+
+class CreateTopupDto(BaseModel):
+    amountVes: str = Field(..., examples=["100000.00"])
+    """
+    Bs to load, two decimals, above 0.
+    """
+    payerPhone: str = Field(..., examples=["04121234567"])
+    """
+    Phone the Pago Móvil is sent from (Venezuelan mobile, 04XXXXXXXXX).
+    """
+    payerCedula: str = Field(..., examples=["V12345678"])
+    """
+    Cédula or RIF of the payer.
+    """
+    sourceNote: str = Field(..., examples=["Ingresos de publicidad, quincena 2"])
+    """
+    Where the money comes from (10–500 characters). Visible to VEX Pay ops.
+    """
+
+
+class TopupReceiverDto(BaseModel):
+    bankCode: str = Field(..., examples=["0169"])
+    """
+    Bank code to pick in your bank app. The bank name is not shown.
+    """
+    phone: str = Field(..., examples=["04140000000"])
+    identification: str = Field(..., examples=["J-000000000"])
+
+
+class TopupDto(BaseModel):
+    id: str
+    status: Literal["pending", "completed", "expired", "failed", "reversed"]
+    amountVes: str = Field(..., examples=["100000.00"])
+    amountUsd: str = Field(..., examples=["500.00"])
+    """
+    USD at the BCV rate snapshotted at creation.
+    """
+    bcvRate: str = Field(..., examples=["200.0000"])
+    feePercent: str = Field(..., examples=["3.5000"])
+    feeFixedUsd: str = Field(..., examples=["0.25"])
+    feeVes: Optional[str] = Field(None, examples=["3550.00"])
+    """
+    Charged when the top-up completes.
+    """
+    creditedVes: Optional[str] = Field(None, examples=["96450.00"])
+    """
+    Credited to your balance (amount − fee).
+    """
+    sourceNote: str
+    payerPhone: str
+    bankReference: Optional[str] = None
+    expiresAt: str
+    completedAt: Optional[str] = None
+    availableAt: Optional[str] = None
+    """
+    When the credit becomes available on its own (null = available).
+    """
+    heldVes: str = Field(..., examples=["96450.00"])
+    """
+    Part of this top-up still held.
+    """
+    instantFeePercent: str = Field(..., examples=["1.5000"])
+    """
+    Instant availability fee percent.
+    """
+    instantFeeVes: str = Field(..., examples=["1446.75"])
+    """
+    Fee to release heldVes now.
+    """
+    instantReleasedAt: Optional[str] = None
+    """
+    When the held part was released early with the instant fee.
+    """
+    receiver: Optional[TopupReceiverDto] = None
+    """
+    Where to send the Pago Móvil (pending only).
+    """
+    test: bool
+    createdAt: str
+
+
+class TopupListDto(BaseModel):
+    data: list[TopupDto]
+    monthlyCapUsd: Optional[str] = Field(..., examples=["3000.00"])
+    monthUsedUsd: str = Field(..., examples=["500.00"])
+    monthRemainingUsd: str = Field(..., examples=["2500.00"])
 
 
 class NotificationTestResponseDto(BaseModel):
