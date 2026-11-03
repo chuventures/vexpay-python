@@ -28,7 +28,7 @@ from ._errors import (
 )
 from ._version import __version__
 
-DEFAULT_BASE_URL = "https://api.pay.vexwallet.co"
+DEFAULT_BASE_URL = "https://api.vexpay.app"
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_NETWORK_RETRIES = 2
 

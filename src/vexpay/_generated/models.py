@@ -26,6 +26,30 @@ class ApiErrorDto(BaseModel):
     """
 
 
+class BsSettlementStatusDto(BaseModel):
+    enabled: bool = Field(..., examples=[True])
+    """
+    True when your available Bs is settled automatically every 15 minutes.
+    """
+    status: Literal[
+        "active",
+        "no_payout_account",
+        "payout_account_unverified",
+        "payout_account_cooling",
+        "paused",
+        "opted_out",
+        "disbursements",
+        "test_mode",
+    ] = Field(..., examples=["active"])
+    """
+    `active` = settling; `no_payout_account` / `payout_account_unverified` = add and verify a payout account; `payout_account_cooling` = destination changed recently; `paused` = paused by VEXPay; `opted_out` = off for your account; `disbursements` = your balance funds disbursements; `test_mode` = never settled in test mode.
+    """
+    minimumVes: str = Field(..., examples=["100.00"])
+    """
+    Smallest available Bs amount that is settled.
+    """
+
+
 class PlatformBalanceDto(BaseModel):
     tenantId: str
     platformId: str = Field(..., examples=["plt_3fd84b2d9ad14f74a2d90f2f56984db5"])
@@ -42,9 +66,9 @@ class PlatformBalanceDto(BaseModel):
     """
     reserveVes: str = Field(..., examples=["100.00"])
     ledgerNetVes: str = Field(..., examples=["8650.00"])
-    heldVes: Optional[str] = Field(None, examples=["4500.00"])
+    heldVes: Optional[str] = Field(None, examples=["0.00"])
     """
-    VES under the 24h balance hold: incoming credits count in `ledgerNetVes` but cannot be paid out until their hold ends. Conversions and seller transfers may still use them.
+    VES under a balance hold set by VEXPay (none by default, see `balanceHoldHours`): such credits count in `ledgerNetVes` but cannot be paid out until their hold ends. Conversions and seller transfers may still use them.
     """
     nextReleaseAt: Optional[AwareDatetime] = Field(
         None, examples=["2026-10-20T00:48:52.784Z"]
@@ -54,7 +78,15 @@ class PlatformBalanceDto(BaseModel):
     """
     availableVes: str = Field(..., examples=["4150.00"])
     """
-    What payouts can spend: ledgerNetVes − reserveVes − heldVes (seller obligations already deducted via SELLER_TRANSFER).
+    What payouts and automatic settlement can spend: ledgerNetVes − reserveVes − heldVes − unconfirmedVes (seller obligations already deducted via SELLER_TRANSFER).
+    """
+    unconfirmedVes: Optional[str] = Field(None, examples=["4500.00"])
+    """
+    Bs from payments the bank has not confirmed yet: they count in `ledgerNetVes` but cannot be paid out or settled until the bank confirms them. Conversions and seller transfers may still use them.
+    """
+    settlement: Optional[BsSettlementStatusDto] = None
+    """
+    Automatic Bs settlement to your verified payout account.
     """
     platformAvailableVes: str = Field(..., examples=["8650.00"])
     sellerObligationsVes: str = Field(..., examples=["1200.00"])
@@ -65,9 +97,9 @@ class PlatformBalanceDto(BaseModel):
     sellerAvailableVes: str = Field(..., examples=["800.00"])
     feePercent: str = Field(..., examples=["2.5000"])
     feeFixedUsd: str = Field(..., examples=["0.00"])
-    balanceHoldHours: Optional[float] = Field(None, examples=[24])
+    balanceHoldHours: Optional[float] = Field(None, examples=[0])
     """
-    Hours each incoming credit is held before payouts can spend it (0 = no hold). Set by VEXPay.
+    Hours each incoming credit is held before payouts can spend it (0 = no hold, the default). Set by VEXPay.
     """
 
 
@@ -187,6 +219,8 @@ class CreateWebhookDto(BaseModel):
             "payment_method.attached",
             "payment_method.updated",
             "payment_method.detached",
+            "test_clock.advancing",
+            "test_clock.ready",
             "notification.test",
         ]
     ] = Field(..., examples=[["payment.completed", "payment.failed"]])
@@ -247,6 +281,8 @@ class WebhookEndpointDto(BaseModel):
             "payment_method.attached",
             "payment_method.updated",
             "payment_method.detached",
+            "test_clock.advancing",
+            "test_clock.ready",
             "notification.test",
         ]
     ]
@@ -314,6 +350,8 @@ class UpdateWebhookDto(BaseModel):
                 "payment_method.attached",
                 "payment_method.updated",
                 "payment_method.detached",
+                "test_clock.advancing",
+                "test_clock.ready",
                 "notification.test",
             ]
         ]
@@ -337,11 +375,11 @@ class PayoutResponseDto(BaseModel):
     """
     status: Literal["completed", "pending", "failed", "awaiting_approval"]
     """
-    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit`, funds returned) when rejected.
+    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit` or `rejected_bank_unfunded`, funds returned) when rejected.
     """
-    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT"]] = None
+    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT", "BANK_UNFUNDED"]] = None
     """
-    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent).
+    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent). `BANK_UNFUNDED`: VEX Pay could not send the transfer right away on its side; it is sent once reviewed, or rejected with `rejected_bank_unfunded` and the funds returned.
     """
     reference: Optional[str] = None
     """
@@ -414,11 +452,11 @@ class PayoutBatchItemResultDto(BaseModel):
     """
     status: Literal["completed", "pending", "failed", "awaiting_approval"]
     """
-    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit`, funds returned) when rejected.
+    `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit` or `rejected_bank_unfunded`, funds returned) when rejected.
     """
-    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT"]] = None
+    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT", "BANK_UNFUNDED"]] = None
     """
-    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent).
+    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent). `BANK_UNFUNDED`: VEX Pay could not send the transfer right away on its side; it is sent once reviewed, or rejected with `rejected_bank_unfunded` and the funds returned.
     """
     reference: Optional[str] = None
     """
@@ -1050,11 +1088,11 @@ class CryptoBalanceDto(BaseModel):
     """
     held: Optional[str] = Field(None, examples=["0.00"])
     """
-    Under the 24h balance hold: credited but not payable until its hold ends, in `currency`.
+    Credited but not payable yet, in `currency`: under a balance hold until it ends, or bought with VES still awaiting bank confirmation until the bank confirms it.
     """
     nextReleaseAt: Optional[AwareDatetime] = None
     """
-    When the soonest held amount becomes available; null when nothing is held.
+    When the soonest held amount becomes available; null when nothing is held or only amounts awaiting bank confirmation (no set time) are held.
     """
     pendingPayout: str = Field(..., examples=["50.10"])
     """
@@ -1810,7 +1848,7 @@ class OnwardPayoutStatusDto(BaseModel):
         "canceled",
     ] = Field(..., examples=["completed"])
     """
-    `waiting_release`: converted, waiting for the 24h balance hold to end before sending (see `sendAfter`).
+    `waiting_release`: converted, waiting before sending until the balance hold ends (see `sendAfter`) or, with `reason: awaiting_bank_confirmation`, until the bank confirms the paid VES.
     """
     network: str = Field(..., examples=["BEP20"])
     address: str = Field(..., examples=["0x2f5c0000000000000000000000000000000000aa"])
@@ -1837,11 +1875,11 @@ class OnwardPayoutStatusDto(BaseModel):
     """
     reason: Optional[str] = Field(None, examples=["below_payout_minimum"])
     """
-    Why it is held, failed or canceled.
+    Why it is waiting, held, failed or canceled (`awaiting_bank_confirmation` while the bank has not confirmed the paid VES).
     """
     sendAfter: Optional[AwareDatetime] = None
     """
-    `waiting_release` only: when the converted USDT leaves the balance hold and the payout is sent.
+    `waiting_release` only: when the converted USDT leaves the balance hold and the payout is sent. Omitted while waiting for bank confirmation.
     """
     updatedAt: AwareDatetime
 
@@ -2596,7 +2634,7 @@ class CheckoutSessionResponseDto(BaseModel):
     """
     Returned only by create. Pass it to @vexpay/js in the browser; never store or log it.
     """
-    url: str = Field(..., examples=["https://pay.vexwallet.co/pay/cs-9f2a4b7c1d3e"])
+    url: str = Field(..., examples=["https://pay.vexpay.app/pay/cs-9f2a4b7c1d3e"])
     amountUsd: str = Field(..., examples=["25.00"])
     description: Optional[str] = None
     reference: Optional[str] = None
@@ -2818,9 +2856,11 @@ class CreateCustomerDto(BaseModel):
     """
     ≤ 20 string key/value pairs.
     """
-    testClock: Optional[str] = None
+    testClock: Optional[str] = Field(
+        None, examples=["clock_3fd84b2d9ad14f74a2d90f2f56984db5"]
+    )
     """
-    Test clock id (test mode only). Not available yet.
+    Attach the customer to a test clock (test mode only, at most 3 customers per clock). Set on create only.
     """
 
 
@@ -2835,6 +2875,9 @@ class CustomerResponseDto(BaseModel):
     bankCode: Optional[str] = Field(...)
     metadata: dict[str, str]
     testClock: Optional[str] = Field(...)
+    """
+    Test clock id (`clock_…`) the customer runs on, or null.
+    """
     createdAt: str
     livemode: bool
 
@@ -2863,9 +2906,11 @@ class UpdateCustomerDto(BaseModel):
     """
     ≤ 20 string key/value pairs.
     """
-    testClock: Optional[str] = None
+    testClock: Optional[str] = Field(
+        None, examples=["clock_3fd84b2d9ad14f74a2d90f2f56984db5"]
+    )
     """
-    Test clock id (test mode only). Not available yet.
+    Attach the customer to a test clock (test mode only, at most 3 customers per clock). Set on create only.
     """
 
 
@@ -3108,3 +3153,43 @@ class PaymentMethodResponseDto(BaseModel):
 class PaymentMethodListResponseDto(BaseModel):
     items: list[PaymentMethodResponseDto]
     nextCursor: Optional[str] = Field(...)
+
+
+class CreateTestClockDto(BaseModel):
+    frozenTime: str = Field(..., examples=["2026-01-01T00:00:00.000Z"])
+    """
+    ISO 8601 time the clock starts at.
+    """
+    name: Optional[str] = Field(None, examples=["Dunning test"], max_length=120)
+
+
+class TestClockResponseDto(BaseModel):
+    id: str = Field(..., examples=["clock_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    object: str = Field(..., examples=["test_clock"])
+    name: Optional[str] = Field(...)
+    frozenTime: str
+    """
+    The clock's current time.
+    """
+    status: Literal["ready", "advancing", "internal_failure"]
+    """
+    advancing while events between the old and new time are being run.
+    """
+    targetTime: Optional[str] = Field(...)
+    """
+    While advancing: the time the clock is moving to.
+    """
+    createdAt: str
+    livemode: bool = Field(..., examples=[False])
+
+
+class TestClockListResponseDto(BaseModel):
+    items: list[TestClockResponseDto]
+    nextCursor: Optional[str] = Field(...)
+
+
+class AdvanceTestClockDto(BaseModel):
+    frozenTime: str = Field(..., examples=["2026-01-05T00:00:00.000Z"])
+    """
+    ISO 8601 time to move to: later than the current one, and at most two intervals of the shortest subscription on the clock ahead.
+    """

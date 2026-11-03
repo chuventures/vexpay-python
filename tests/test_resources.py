@@ -517,6 +517,47 @@ def test_setup_sessions_and_payment_methods(server: MockServer) -> None:
     assert server.requests[3].method == "DELETE" and server.requests[3].path == "/v1/payment-methods/pm_1"
 
 
+TEST_CLOCK = {
+    "id": "clock_1", "object": "test_clock", "name": "Dunning", "frozenTime": "2026-01-01T00:00:00.000Z",
+    "status": "ready", "targetTime": None, "createdAt": "2026-10-20T00:00:00.000Z", "livemode": False,
+}
+
+
+def test_test_clocks(server: MockServer) -> None:
+    server.script([
+        Scripted(201, TEST_CLOCK),
+        Scripted(200, {"items": [TEST_CLOCK], "nextCursor": None}),
+        Scripted(200, TEST_CLOCK),
+        Scripted(200, {**TEST_CLOCK, "status": "advancing", "targetTime": "2026-01-05T00:00:00.000Z"}),
+        Scripted(200, {"id": "clock_1", "deleted": True}),
+    ])
+    client = VexPay("k", base_url=server.url)
+    clock = client.test_clocks.create({"frozenTime": "2026-01-01T00:00:00.000Z", "name": "Dunning"})
+    assert clock.id == "clock_1" and clock.status == "ready"
+    assert server.requests[0].path == "/v1/test-clocks" and server.requests[0].body == {"frozenTime": "2026-01-01T00:00:00.000Z", "name": "Dunning"}
+    assert [c.id for c in client.test_clocks.list()] == ["clock_1"]
+    assert client.test_clocks.retrieve("clock_1").frozenTime == "2026-01-01T00:00:00.000Z"
+    assert server.requests[2].path == "/v1/test-clocks/clock_1"
+    advancing = client.test_clocks.advance("clock_1", {"frozenTime": "2026-01-05T00:00:00.000Z"})
+    assert advancing.status == "advancing"
+    assert server.requests[3].method == "POST" and server.requests[3].path == "/v1/test-clocks/clock_1/advance"
+    assert client.test_clocks.delete("clock_1").deleted is True
+    assert server.requests[4].method == "DELETE" and server.requests[4].path == "/v1/test-clocks/clock_1"
+
+
+async def test_async_test_clocks(server: MockServer) -> None:
+    server.script([
+        Scripted(201, TEST_CLOCK),
+        Scripted(200, {"items": [TEST_CLOCK], "nextCursor": None}),
+        Scripted(200, {**TEST_CLOCK, "status": "advancing"}),
+    ])
+    async with AsyncVexPay("k", base_url=server.url) as client:
+        assert (await client.test_clocks.create({"frozenTime": "2026-01-01T00:00:00.000Z"})).id == "clock_1"
+        assert [c.id async for c in client.test_clocks.list()] == ["clock_1"]
+        assert (await client.test_clocks.advance("clock_1", {"frozenTime": "2026-01-02T00:00:00.000Z"})).status == "advancing"
+        assert server.requests[2].path == "/v1/test-clocks/clock_1/advance"
+
+
 def test_bolivar_payment_method_list_is_unchanged(server: MockServer) -> None:
     server.script([Scripted(200, {"methods": []})])
     client = VexPay("k", base_url=server.url)

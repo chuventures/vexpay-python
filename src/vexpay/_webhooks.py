@@ -62,6 +62,8 @@ WEBHOOK_EVENT_NAMES: tuple[str, ...] = (
     "payment_method.attached",
     "payment_method.updated",
     "payment_method.detached",
+    "test_clock.advancing",
+    "test_clock.ready",
     "notification.test",
 )
 

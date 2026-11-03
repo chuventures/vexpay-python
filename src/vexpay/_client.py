@@ -56,6 +56,8 @@ class VexPay:
         self.setup_sessions = r.SetupSessions(self._http)
         #: Domiciliación payment methods (``payments.methods()`` lists the bolívar pay-in methods).
         self.payment_methods = r.PaymentMethods(self._http)
+        #: Test mode only: simulated time for trials, renewals and dunning.
+        self.test_clocks = r.TestClocks(self._http)
         #: Offline helpers: ``construct_event`` verifies deliveries; no API calls.
         self.webhooks = Webhook()
 
@@ -114,6 +116,7 @@ class AsyncVexPay:
         self.invoices = ar.AsyncInvoices(self._http)
         self.setup_sessions = ar.AsyncSetupSessions(self._http)
         self.payment_methods = ar.AsyncPaymentMethods(self._http)
+        self.test_clocks = ar.AsyncTestClocks(self._http)
         self.webhooks = Webhook()
 
     async def aclose(self) -> None:

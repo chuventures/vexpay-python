@@ -1,6 +1,6 @@
 # VEXPay Python SDK
 
-The official Python library for the [VEXPay](https://vexwallet.co/vexpay) API: accept Venezuelan payments (Pago Móvil C2P, cards, débito inmediato), pay out to merchants, create checkout sessions, and verify signed webhooks.
+The official Python library for the [VEXPay](https://vexpay.app) API: accept Venezuelan payments (Pago Móvil C2P, cards, débito inmediato), pay out to merchants, create checkout sessions, and verify signed webhooks.
 
 - Sync (`VexPay`) and async (`AsyncVexPay`) clients with the same methods
 - Typed Pydantic v2 models generated from the VEXPay OpenAPI contract
@@ -215,7 +215,7 @@ available = vexpay.cop.balance.retrieve().availableCop
 
 ## Testing card payments
 
-With a test API key, VPOS test cards return a fixed outcome without reaching the bank: `4242424242424242` succeeds, `4000000000009995` is declined with `G51` (insufficient funds), `4000000000000259` completes and is then charged back, and more. A decline fails exactly like a live one (422, the bank code in `code` and `failureCode`, a `payment.failed` webhook). With a live key these numbers are refused with 400 `test_card_in_live_mode`. Full list: [test cards](https://docs.pay.vexwallet.co/vpos#test-card).
+With a test API key, VPOS test cards return a fixed outcome without reaching the bank: `4242424242424242` succeeds, `4000000000009995` is declined with `G51` (insufficient funds), `4000000000000259` completes and is then charged back, and more. A decline fails exactly like a live one (422, the bank code in `code` and `failureCode`, a `payment.failed` webhook). With a live key these numbers are refused with 400 `test_card_in_live_mode`. Full list: [test cards](https://docs.vexpay.app/vpos#test-card).
 
 ## Webhooks
 
@@ -373,7 +373,7 @@ from vexpay import VexPay
 
 with VexPay(
     api_key="sk_test_…",               # default: VEXPAY_API_KEY env var
-    base_url="http://localhost:3010",  # default: https://api.pay.vexwallet.co
+    base_url="http://localhost:3010",  # default: https://api.vexpay.app
     timeout=30.0,
     max_network_retries=2,
 ) as vexpay:

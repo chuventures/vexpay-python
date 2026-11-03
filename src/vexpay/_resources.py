@@ -996,3 +996,43 @@ class PaymentMethods(SyncAPIResource):
         return self._request_model(
             "PaymentMethods_detach", m.PaymentMethodResponseDto, path={"id": id}, options=options
         )
+
+
+class TestClocks(SyncAPIResource):
+    """Test mode only: frozen time for up to 3 customers, moved forward to run trials, renewals and dunning.
+
+    Attach a customer with ``customers.create({"testClock": clock.id, ...})``.
+    """
+
+    def create(
+        self, params: Union[m.CreateTestClockDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.TestClockResponseDto:
+        """``frozenTime`` is an ISO 8601 time."""
+        return self._request_model("TestClocks_create", m.TestClockResponseDto, body=params, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.TestClockListResponseDto, m.TestClockResponseDto]:
+        """Newest first."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "TestClocks_list", m.TestClockListResponseDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.TestClockResponseDto:
+        return self._request_model("TestClocks_retrieve", m.TestClockResponseDto, path={"id": id}, options=options)
+
+    def delete(self, id: str, **options: Unpack[RequestOptions]) -> m.DeletedObjectResponseDto:
+        """Deletes the clock with its customers, subscriptions, invoices and payment methods."""
+        return self._request_model("TestClocks_remove", m.DeletedObjectResponseDto, path={"id": id}, options=options)
+
+    def advance(
+        self, id: str, params: Union[m.AdvanceTestClockDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.TestClockResponseDto:
+        """Move the clock forward; returns ``advancing`` at once. Poll ``retrieve`` or wait for ``test_clock.ready``."""
+        return self._request_model(
+            "TestClocks_advance", m.TestClockResponseDto, path={"id": id}, body=params, options=options
+        )

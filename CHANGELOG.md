@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.0
+
+- The default API origin is now `https://api.vexpay.app`. The earlier host `https://api.pay.vexwallet.co` keeps working with no end date; pass it as `base_url` to keep using it.
+
 ## 0.14.0
 
 - Test mode (sync and async): `crypto.simulate_deposit({"customerRef": ..., "network": ..., "amount": ...})` makes a deposit arrive at one of your stablecoin deposit addresses: the same payment, fee, balance hold and `payment.completed` webhook (`livemode: false`) as a real deposit. Live keys get 403 `test_mode_only`; an address you have not requested gets 404 `not_found`.

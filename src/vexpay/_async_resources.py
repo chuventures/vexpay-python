@@ -995,3 +995,43 @@ class AsyncPaymentMethods(AsyncAPIResource):
         return await self._request_model(
             "PaymentMethods_detach", m.PaymentMethodResponseDto, path={"id": id}, options=options
         )
+
+
+class AsyncTestClocks(AsyncAPIResource):
+    """Test mode only: frozen time for up to 3 customers, moved forward to run trials, renewals and dunning.
+
+    Attach a customer with ``customers.create({"testClock": clock.id, ...})``.
+    """
+
+    async def create(
+        self, params: Union[m.CreateTestClockDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.TestClockResponseDto:
+        """``frozenTime`` is an ISO 8601 time."""
+        return await self._request_model("TestClocks_create", m.TestClockResponseDto, body=params, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> AsyncPage[m.TestClockListResponseDto, m.TestClockResponseDto]:
+        """Newest first."""
+        query = dict(params or {})
+        return AsyncPage(
+            lambda cursor: self._request_model(
+                "TestClocks_list", m.TestClockListResponseDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    async def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.TestClockResponseDto:
+        return await self._request_model("TestClocks_retrieve", m.TestClockResponseDto, path={"id": id}, options=options)
+
+    async def delete(self, id: str, **options: Unpack[RequestOptions]) -> m.DeletedObjectResponseDto:
+        """Deletes the clock with its customers, subscriptions, invoices and payment methods."""
+        return await self._request_model("TestClocks_remove", m.DeletedObjectResponseDto, path={"id": id}, options=options)
+
+    async def advance(
+        self, id: str, params: Union[m.AdvanceTestClockDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.TestClockResponseDto:
+        """Move the clock forward; returns ``advancing`` at once. Poll ``retrieve`` or wait for ``test_clock.ready``."""
+        return await self._request_model(
+            "TestClocks_advance", m.TestClockResponseDto, path={"id": id}, body=params, options=options
+        )
