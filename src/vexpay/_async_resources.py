@@ -259,10 +259,24 @@ class AsyncPayoutMethods(AsyncAPIResource):
         )
 
 
+class AsyncMarketplaceSettings(AsyncAPIResource):
+    """Marketplace comercio auto-payout: the default for new merchants and the payout minimum."""
+
+    async def retrieve(self, **options: Unpack[RequestOptions]) -> m.MarketplaceSettingsDto:
+        return await self._request_model("MarketplaceSettings_get", m.MarketplaceSettingsDto, options=options)
+
+    async def update(
+        self, params: Union[m.UpdateMarketplaceSettingsDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.MarketplaceSettingsDto:
+        """``merchantAutoPayoutDefault`` and/or ``merchantAutoPayoutMinUsd`` (USD; None clears it)."""
+        return await self._request_model("MarketplaceSettings_update", m.MarketplaceSettingsDto, body=params, options=options)
+
+
 class AsyncMerchants(AsyncAPIResource):
     def __init__(self, http: Any) -> None:
         super().__init__(http)
         self.payout_methods = AsyncPayoutMethods(self._http)
+        self.marketplace_settings = AsyncMarketplaceSettings(self._http)
 
     async def create(
         self, params: Union[m.CreateMerchantDto, Params], **options: Unpack[RequestOptions]
@@ -543,7 +557,7 @@ class AsyncBalance(AsyncAPIResource):
 
 
 class AsyncTenantPayoutAccount(AsyncAPIResource):
-    """The account your own VEXPay earnings are paid out to."""
+    """The account your own VEX Pay earnings are paid out to."""
 
     async def retrieve(self, **options: Unpack[RequestOptions]) -> m.TenantPayoutAccountResponseDto:
         return await self._request_model("TenantPayoutAccount_get", m.TenantPayoutAccountResponseDto, options=options)
@@ -581,7 +595,7 @@ class AsyncTenantPayoutAccount(AsyncAPIResource):
 
 
 class AsyncWebhookEndpoints(AsyncAPIResource):
-    """Where VEXPay delivers signed webhooks."""
+    """Where VEX Pay delivers signed webhooks."""
 
     async def create(
         self, params: Union[m.CreateWebhookDto, Params], **options: Unpack[RequestOptions]
@@ -767,7 +781,7 @@ class AsyncConversions(AsyncAPIResource):
     """Convert available VES or COP into your USDT balance (enabled per account).
 
     Accepting a quote debits the source at once (``conversion.created``); the conversion is ``PENDING``
-    until VEXPay delivers the USDT (``conversion.completed``).
+    until VEX Pay delivers the USDT (``conversion.completed``).
     """
 
     def __init__(self, http: Any) -> None:
@@ -963,7 +977,7 @@ class AsyncInvoices(AsyncAPIResource):
     async def pay(
         self, id: str, params: Union[m.PayInvoiceDto, Params], **options: Unpack[RequestOptions]
     ) -> m.InvoiceResponseDto:
-        """Mark an open invoice paid outside VEXPay (``{"paidOutOfBand": True}``). No payment, no balance change."""
+        """Mark an open invoice paid outside VEX Pay (``{"paidOutOfBand": True}``). No payment, no balance change."""
         return await self._request_model("Invoices_pay", m.InvoiceResponseDto, path={"id": id}, body=params, options=options)
 
 

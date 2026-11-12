@@ -13,7 +13,7 @@ from ._webhooks import Webhook
 
 
 class VexPay:
-    """Synchronous VEXPay client.
+    """Synchronous VEX Pay client.
 
     >>> from vexpay import VexPay
     >>> vexpay = VexPay(api_key=os.environ["VEXPAY_API_KEY"])  # doctest: +SKIP
@@ -78,7 +78,7 @@ class VexPay:
 
 
 class AsyncVexPay:
-    """Asynchronous VEXPay client (same resources as :class:`VexPay`, awaitable)."""
+    """Asynchronous VEX Pay client (same resources as :class:`VexPay`, awaitable)."""
 
     def __init__(
         self,

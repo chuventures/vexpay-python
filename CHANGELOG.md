@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.17.0
+
+- Marketplace: `splits` (up to 10 shares: `merchantId`, `amount`, optional `applicationFeeVes` / `applicationFeePercent`, `reference`; `SplitShareDto`) on débito execute, C2P request / execute, Pago Móvil verify and VPOS create. Payments read back `splits` (`PaymentSplitViewDto`) with each share's commission, VEX Pay fee and net.
+- New `merchants.marketplace_settings.retrieve()` / `update()` (sync and async; `MarketplaceSettingsDto`, `UpdateMarketplaceSettingsDto`) for the comercio auto-payout default and minimum; `merchants.create` takes an optional `autoPayoutEnabled`.
+
+## 0.16.0
+
+- Payout account: `tenant_payout_account.upsert` takes `"type": "bank_account"` with `cuenta` (20 digits), `cedula` and `titular` to receive instant credits on a checking account; omitting `type` keeps the Pago Móvil account. Responses add `type`, `holderName` and the masked `destination`.
+- Error messages and docstrings write the brand as "VEX Pay" (was "VEXPay").
+- Package metadata: the PyPI homepage is https://vexpay.app, with Documentation (https://docs.vexpay.app/python-sdk), Source and Issues links; the author is "VEX Pay".
+
 ## 0.15.0
 
 - The default API origin is now `https://api.vexpay.app`. The earlier host `https://api.pay.vexwallet.co` keeps working with no end date; pass it as `base_url` to keep using it.

@@ -1,4 +1,4 @@
-"""Verify VEXPay webhook deliveries (``VexPay-Signature: t=<unix>,v1=<hex hmac>``)."""
+"""Verify VEX Pay webhook deliveries (``VexPay-Signature: t=<unix>,v1=<hex hmac>``)."""
 
 from __future__ import annotations
 
@@ -223,7 +223,7 @@ class Webhook:
         try:
             return GenericEvent.model_validate(data)
         except ValidationError as exc:
-            raise SignatureVerificationError("Webhook payload is not a VEXPay event envelope.") from exc
+            raise SignatureVerificationError("Webhook payload is not a VEX Pay event envelope.") from exc
 
     @staticmethod
     def generate_test_header(payload: str, secret: str, timestamp: Optional[int] = None) -> str:

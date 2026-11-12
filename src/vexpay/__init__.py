@@ -1,4 +1,4 @@
-"""Official Python SDK for the VEXPay API."""
+"""Official Python SDK for the VEX Pay API."""
 
 from ._client import AsyncVexPay, VexPay
 from ._core import DEFAULT_BASE_URL, RequestOptions

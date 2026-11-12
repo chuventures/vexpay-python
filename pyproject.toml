@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vexpay"
-version = "0.15.0"
-description = "Official Python SDK for the VEXPay API — Venezuelan payments (Pago Móvil C2P, cards, débito inmediato), payouts, checkout sessions, and signed webhooks."
+version = "0.17.0"
+description = "Official Python SDK for the VEX Pay API — Venezuelan payments (Pago Móvil C2P, cards, débito inmediato), payouts, checkout sessions, and signed webhooks."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.9"
-authors = [{ name = "VEXPay" }]
+authors = [{ name = "VEX Pay" }]
 keywords = ["vexpay", "venezuela", "payments", "pago movil", "c2p", "bolivares", "sdk"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -31,7 +31,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/chuventures/vexpay-python"
+Homepage = "https://vexpay.app"
+Documentation = "https://docs.vexpay.app/python-sdk"
+Source = "https://github.com/chuventures/vexpay-python"
 Issues = "https://github.com/chuventures/vexpay-python/issues"
 
 [dependency-groups]

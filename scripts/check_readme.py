@@ -1,4 +1,4 @@
-"""Runs every ```python block in README.md against a live VEXPay API (use a local sandbox).
+"""Runs every ```python block in README.md against a live VEX Pay API (use a local sandbox).
 
     VEXPAY_API_KEY=<test-mode key> VEXPAY_BASE_URL=http://127.0.0.1:3010 \
     VEXPAY_SANDBOX_OTP=<current sandbox token> python scripts/check_readme.py

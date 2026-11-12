@@ -26,142 +26,6 @@ class ApiErrorDto(BaseModel):
     """
 
 
-class BsSettlementStatusDto(BaseModel):
-    enabled: bool = Field(..., examples=[True])
-    """
-    True when your available Bs is settled automatically every 15 minutes.
-    """
-    status: Literal[
-        "active",
-        "no_payout_account",
-        "payout_account_unverified",
-        "payout_account_cooling",
-        "paused",
-        "opted_out",
-        "disbursements",
-        "test_mode",
-    ] = Field(..., examples=["active"])
-    """
-    `active` = settling; `no_payout_account` / `payout_account_unverified` = add and verify a payout account; `payout_account_cooling` = destination changed recently; `paused` = paused by VEXPay; `opted_out` = off for your account; `disbursements` = your balance funds disbursements; `test_mode` = never settled in test mode.
-    """
-    minimumVes: str = Field(..., examples=["100.00"])
-    """
-    Smallest available Bs amount that is settled.
-    """
-
-
-class PlatformBalanceDto(BaseModel):
-    tenantId: str
-    platformId: str = Field(..., examples=["plt_3fd84b2d9ad14f74a2d90f2f56984db5"])
-    collectedVes: str = Field(..., examples=["10000.00"])
-    feesVes: str = Field(..., examples=["250.00"])
-    paidOutVes: str = Field(..., examples=["1000.00"])
-    convertedVes: str = Field(..., examples=["0.00"])
-    """
-    Net VES spent on VES→USDT conversions.
-    """
-    chargebackFeesVes: str = Field(..., examples=["0.00"])
-    """
-    Net card chargeback fees charged (fees minus fees returned on won disputes).
-    """
-    reserveVes: str = Field(..., examples=["100.00"])
-    ledgerNetVes: str = Field(..., examples=["8650.00"])
-    heldVes: Optional[str] = Field(None, examples=["0.00"])
-    """
-    VES under a balance hold set by VEXPay (none by default, see `balanceHoldHours`): such credits count in `ledgerNetVes` but cannot be paid out until their hold ends. Conversions and seller transfers may still use them.
-    """
-    nextReleaseAt: Optional[AwareDatetime] = Field(
-        None, examples=["2026-10-20T00:48:52.784Z"]
-    )
-    """
-    When the soonest held amount becomes available; null when nothing is held.
-    """
-    availableVes: str = Field(..., examples=["4150.00"])
-    """
-    What payouts and automatic settlement can spend: ledgerNetVes − reserveVes − heldVes − unconfirmedVes (seller obligations already deducted via SELLER_TRANSFER).
-    """
-    unconfirmedVes: Optional[str] = Field(None, examples=["4500.00"])
-    """
-    Bs from payments the bank has not confirmed yet: they count in `ledgerNetVes` but cannot be paid out or settled until the bank confirms them. Conversions and seller transfers may still use them.
-    """
-    settlement: Optional[BsSettlementStatusDto] = None
-    """
-    Automatic Bs settlement to your verified payout account.
-    """
-    platformAvailableVes: str = Field(..., examples=["8650.00"])
-    sellerObligationsVes: str = Field(..., examples=["1200.00"])
-    """
-    Sum of seller pending + available obligations.
-    """
-    sellerPendingVes: str = Field(..., examples=["400.00"])
-    sellerAvailableVes: str = Field(..., examples=["800.00"])
-    feePercent: str = Field(..., examples=["2.5000"])
-    feeFixedUsd: str = Field(..., examples=["0.00"])
-    balanceHoldHours: Optional[float] = Field(None, examples=[0])
-    """
-    Hours each incoming credit is held before payouts can spend it (0 = no hold, the default). Set by VEXPay.
-    """
-
-
-class BalanceTransactionDto(BaseModel):
-    id: str
-    """
-    Stable id of the movement; never changes or disappears.
-    """
-    type: Literal[
-        "payment",
-        "fee",
-        "payment_reversal",
-        "fee_reversal",
-        "payout",
-        "payout_reversal",
-        "chargeback",
-        "chargeback_fee",
-        "chargeback_reversal",
-        "adjustment",
-        "seller_transfer",
-        "seller_transfer_reversal",
-        "conversion",
-        "conversion_reversal",
-        "merchant_payout_fee",
-        "disbursement_payout_fee",
-        "disbursement_payout_fee_reversal",
-        "topup",
-        "topup_fee",
-        "topup_instant_release",
-        "topup_instant_fee",
-    ] = Field(..., examples=["chargeback"])
-    amountVes: str = Field(..., examples=["-4000.00"])
-    """
-    Signed VES amount (negative = money out of your balance).
-    """
-    paymentId: Optional[str] = None
-    payoutId: Optional[str] = None
-    chargebackId: Optional[str] = None
-    """
-    Present on chargeback movements.
-    """
-    merchantId: Optional[str] = None
-    externalRef: Optional[str] = Field(None, examples=["order-1042"])
-    """
-    externalRef of the linked payment or payout.
-    """
-    description: str = Field(..., examples=["Card chargeback (fraud)"])
-    availableAt: Optional[AwareDatetime] = None
-    """
-    Part of the 24h balance hold: this movement counts in `heldVes` (not `availableVes`) until this time.
-    """
-    createdAt: AwareDatetime
-
-
-class BalanceTransactionListDto(BaseModel):
-    items: list[BalanceTransactionDto]
-    nextCursor: Optional[str] = Field(...)
-    """
-    Pass as `cursor` to get the next (older) page; null on the last page.
-    """
-
-
 class CreateWebhookDto(BaseModel):
     url: AnyUrl = Field(..., examples=["https://merchant.example.com/webhooks/vexpay"])
     secret: Optional[str] = Field(None, examples=["replace-with-a-long-random-secret"])
@@ -366,6 +230,141 @@ class UpdateWebhookDto(BaseModel):
 
 class DeleteWebhookResponseDto(BaseModel):
     deleted: bool = Field(..., examples=[True])
+
+
+class BsSettlementStatusDto(BaseModel):
+    enabled: bool = Field(..., examples=[True])
+    """
+    True when your available Bs is settled automatically as soon as the bank confirms each sale.
+    """
+    status: Literal[
+        "active",
+        "no_payout_account",
+        "payout_account_unverified",
+        "payout_account_cooling",
+        "paused",
+        "disbursements",
+        "test_mode",
+    ] = Field(..., examples=["active"])
+    """
+    `active` = settling; `no_payout_account` / `payout_account_unverified` = add and verify a payout account; `payout_account_cooling` = destination changed recently; `paused` = paused by VEX Pay; `disbursements` = your balance funds disbursements; `test_mode` = never settled in test mode.
+    """
+    minimumVes: str = Field(..., examples=["100.00"])
+    """
+    Smallest available Bs amount that is settled.
+    """
+
+
+class PlatformBalanceDto(BaseModel):
+    tenantId: str
+    platformId: str = Field(..., examples=["plt_3fd84b2d9ad14f74a2d90f2f56984db5"])
+    collectedVes: str = Field(..., examples=["10000.00"])
+    feesVes: str = Field(..., examples=["250.00"])
+    paidOutVes: str = Field(..., examples=["1000.00"])
+    convertedVes: str = Field(..., examples=["0.00"])
+    """
+    Net VES spent on VES→USDT conversions.
+    """
+    chargebackFeesVes: str = Field(..., examples=["0.00"])
+    """
+    Net card chargeback fees charged (fees minus fees returned on won disputes).
+    """
+    reserveVes: str = Field(..., examples=["100.00"])
+    ledgerNetVes: str = Field(..., examples=["8650.00"])
+    heldVes: Optional[str] = Field(None, examples=["0.00"])
+    """
+    VES under a balance hold set by VEX Pay (none by default, see `balanceHoldHours`): such credits count in `ledgerNetVes` but cannot be paid out until their hold ends. Conversions and seller transfers may still use them.
+    """
+    nextReleaseAt: Optional[AwareDatetime] = Field(
+        None, examples=["2026-10-20T00:48:52.784Z"]
+    )
+    """
+    When the soonest held amount becomes available; null when nothing is held.
+    """
+    availableVes: str = Field(..., examples=["4150.00"])
+    """
+    What payouts and automatic settlement can spend: ledgerNetVes − reserveVes − heldVes − unconfirmedVes (seller obligations already deducted via SELLER_TRANSFER).
+    """
+    unconfirmedVes: Optional[str] = Field(None, examples=["4500.00"])
+    """
+    Bs from payments the bank has not confirmed yet: they count in `ledgerNetVes` but cannot be paid out or settled until the bank confirms them. Conversions and seller transfers may still use them.
+    """
+    settlement: Optional[BsSettlementStatusDto] = None
+    """
+    Automatic Bs settlement to your verified payout account.
+    """
+    platformAvailableVes: str = Field(..., examples=["8650.00"])
+    sellerObligationsVes: str = Field(..., examples=["1200.00"])
+    """
+    Sum of seller pending + available obligations.
+    """
+    sellerPendingVes: str = Field(..., examples=["400.00"])
+    sellerAvailableVes: str = Field(..., examples=["800.00"])
+    feePercent: str = Field(..., examples=["2.5000"])
+    feeFixedUsd: str = Field(..., examples=["0.00"])
+    balanceHoldHours: Optional[float] = Field(None, examples=[0])
+    """
+    Hours each incoming credit is held before payouts can spend it (0 = no hold, the default). Set by VEX Pay.
+    """
+
+
+class BalanceTransactionDto(BaseModel):
+    id: str
+    """
+    Stable id of the movement; never changes or disappears.
+    """
+    type: Literal[
+        "payment",
+        "fee",
+        "payment_reversal",
+        "fee_reversal",
+        "payout",
+        "payout_reversal",
+        "chargeback",
+        "chargeback_fee",
+        "chargeback_reversal",
+        "adjustment",
+        "seller_transfer",
+        "seller_transfer_reversal",
+        "conversion",
+        "conversion_reversal",
+        "merchant_payout_fee",
+        "disbursement_payout_fee",
+        "disbursement_payout_fee_reversal",
+        "topup",
+        "topup_fee",
+        "topup_instant_release",
+        "topup_instant_fee",
+    ] = Field(..., examples=["chargeback"])
+    amountVes: str = Field(..., examples=["-4000.00"])
+    """
+    Signed VES amount (negative = money out of your balance).
+    """
+    paymentId: Optional[str] = None
+    payoutId: Optional[str] = None
+    chargebackId: Optional[str] = None
+    """
+    Present on chargeback movements.
+    """
+    merchantId: Optional[str] = None
+    externalRef: Optional[str] = Field(None, examples=["order-1042"])
+    """
+    externalRef of the linked payment or payout.
+    """
+    description: str = Field(..., examples=["Card chargeback (fraud)"])
+    availableAt: Optional[AwareDatetime] = None
+    """
+    Part of the 24h balance hold: this movement counts in `heldVes` (not `availableVes`) until this time.
+    """
+    createdAt: AwareDatetime
+
+
+class BalanceTransactionListDto(BaseModel):
+    items: list[BalanceTransactionDto]
+    nextCursor: Optional[str] = Field(...)
+    """
+    Pass as `cursor` to get the next (older) page; null on the last page.
+    """
 
 
 class PayoutResponseDto(BaseModel):
@@ -608,9 +607,14 @@ class CreatePayoutBatchDto(BaseModel):
 class TenantPayoutAccountResponseDto(BaseModel):
     accountId: str
     bankCode: str = Field(..., examples=["0163"])
+    type: Literal["pago_movil", "bank_account"]
     destination: str
     """
-    Masked phone, e.g. …5555
+    Masked destination: phone `…5555` (Pago Móvil) or account `••••6789` (bank_account).
+    """
+    holderName: Optional[str] = None
+    """
+    Account holder name (bank_account only).
     """
     identification: str = Field(..., examples=["V12345678"])
     eligibility: Literal[
@@ -649,17 +653,29 @@ class TenantPayoutAccountVerifyConfirmResponseDto(BaseModel):
 
 
 class UpsertTenantPayoutAccountDto(BaseModel):
-    banco: str = Field(..., examples=["0163"])
+    type: Literal["pago_movil", "bank_account"] = "pago_movil"
     """
-    Beneficiary bank SIMF code (3–4 digits). Prefer codes from GET /v1/banks.
+    `pago_movil` (bank + phone) or `bank_account` (20-digit checking account). Switching type is a destination change.
+    """
+    banco: Optional[str] = Field(None, examples=["0163"])
+    """
+    Beneficiary bank SIMF code (3–4 digits). Prefer codes from GET /v1/banks. Required for `pago_movil`; for `bank_account` it is taken from the account number and, when sent, must match its first 4 digits.
     """
     cedula: str = Field(..., examples=["V12345678"])
     """
-    Beneficiary cédula/RIF.
+    Beneficiary (account holder) cédula/RIF.
     """
-    telefono: str = Field(..., examples=["584121234567"])
+    telefono: Optional[str] = Field(None, examples=["584121234567"])
     """
-    Beneficiary Pago Móvil phone (58… or 0…).
+    Beneficiary Pago Móvil phone (58… or 0…). Required for `pago_movil`.
+    """
+    cuenta: Optional[str] = Field(None, examples=["01160123450123456789"])
+    """
+    20-digit checking account number. Required for `bank_account`.
+    """
+    titular: Optional[str] = Field(None, examples=["Rival Plus C.A."], max_length=80)
+    """
+    Account holder name. Required for `bank_account`.
     """
 
 
@@ -728,7 +744,7 @@ class ImmediateDebitResponseDto(BaseModel):
     """
     paymentId: str = Field(..., examples=["3fd84b2d-9ad1-4f74-a2d9-0f2f56984db5"])
     """
-    VEXPay payment id for this débito inmediato (method DEBITO_INMEDIATO).
+    VEX Pay payment id for this débito inmediato (method DEBITO_INMEDIATO).
     """
     externalRef: Optional[str] = Field(
         None, examples=["fine_736a0b42-0b6e-454c-b87e-7f3c0e47057b"]
@@ -870,6 +886,33 @@ class GenerateDebitOtpDto(BaseModel):
     """
 
 
+class SplitShareDto(BaseModel):
+    merchantId: str = Field(..., examples=["mrc_3f2b9c1e0a7d4e6f8b1c2d3e4f5a6b7c"])
+    """
+    A merchant of your account (UUID or `mrc_…` id). Each merchant at most once per payment.
+    """
+    amount: Union[str, float] = Field(..., examples=["6000.00"])
+    """
+    This merchant's share, in the currency of the request's amount: VES for débito, C2P and Pago Móvil; for VPOS, VES when you send `vesAmount`, else USD. A string with exactly two decimals ("6000.00") or a number with at most two. USD shares are converted at the payment's rate and rounded down to Bs 0.01. Whatever the shares do not cover stays with your account (the marketplace remainder).
+    """
+    applicationFeeVes: Optional[str] = Field(None, examples=["1200.00"])
+    """
+    Your commission on this share, in VES (exactly two decimals). Not with applicationFeePercent.
+    """
+    applicationFeePercent: Optional[float] = Field(
+        None, examples=[20], ge=0.0, le=100.0
+    )
+    """
+    Your commission as a percent of this share's VES amount. When both are omitted the merchant's negotiated commission applies, else your default commission, else none.
+    """
+    reference: Optional[str] = Field(
+        None, examples=["order-1042/provider-a"], max_length=64
+    )
+    """
+    Free text returned as sent.
+    """
+
+
 class ImmediateDebitDto(BaseModel):
     banco: str = Field(..., examples=["0191"], pattern="^\\d{3,4}$")
     """
@@ -915,6 +958,10 @@ class ImmediateDebitDto(BaseModel):
     )
     """
     Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
+    """
+    splits: Optional[list[SplitShareDto]] = Field(None, max_length=10, min_length=1)
+    """
+    Split this payment between up to 10 of your merchants (marketplace). Each merchant is credited its share minus its part of the VEX Pay fee and your commission when the bank confirms the payment; the rest stays with your account. Not with merchantId / applicationFeeVes / applicationFeePercent, and not with onwardPayout. See the "Marketplace: split one payment between comercios" guide.
     """
 
 
@@ -1302,7 +1349,7 @@ class CryptoPayoutDto(BaseModel):
     txHash: Optional[str] = None
     internal: bool
     """
-    Settled inside VEXPay (destination is one of your own deposit addresses).
+    Settled inside VEX Pay (destination is one of your own deposit addresses).
     """
     failureReason: Optional[str] = None
     createdAt: AwareDatetime
@@ -1407,9 +1454,9 @@ class CopPseDto(BaseModel):
 
 
 class CreateCopPaymentDto(BaseModel):
-    amountCop: float = Field(..., examples=[100000], ge=2000.0)
+    amountCop: float = Field(..., examples=[100000], ge=20000.0)
     """
-    Amount in whole Colombian pesos. At least 2,000 (`amount_below_minimum` otherwise).
+    Amount in whole Colombian pesos. At least 20,000 (`amount_below_minimum` otherwise).
     """
     channel: Literal[
         "breb",
@@ -1834,6 +1881,10 @@ class C2pRequestDto(BaseModel):
     """
     Convert this payment's net VES to USDT once it completes and send it to this wallet. Needs USDT and conversions enabled; not allowed with merchantId. See the "Pay in bolívars, receive USDT" guide.
     """
+    splits: Optional[list[SplitShareDto]] = Field(None, max_length=10, min_length=1)
+    """
+    Split this payment between up to 10 of your merchants (marketplace). Each merchant is credited its share minus its part of the VEX Pay fee and your commission when the bank confirms the payment; the rest stays with your account. Not with merchantId / applicationFeeVes / applicationFeePercent, and not with onwardPayout. See the "Marketplace: split one payment between comercios" guide.
+    """
 
 
 class OnwardPayoutStatusDto(BaseModel):
@@ -1882,6 +1933,33 @@ class OnwardPayoutStatusDto(BaseModel):
     `waiting_release` only: when the converted USDT leaves the balance hold and the payout is sent. Omitted while waiting for bank confirmation.
     """
     updatedAt: AwareDatetime
+
+
+class PaymentSplitViewDto(BaseModel):
+    merchantId: str
+    accountId: str = Field(..., examples=["acct_3f2b9c1e0a7d4e6f8b1c2d3e4f5a6b7c"])
+    """
+    The merchant's account id (same as the payment-level accountId).
+    """
+    merchantExternalRef: Optional[str] = Field(None, examples=["planazo-comercio-17"])
+    """
+    The merchant's externalRef.
+    """
+    amountVes: str = Field(..., examples=["6000.00"])
+    applicationFeeVes: str = Field(..., examples=["1200.00"])
+    """
+    Your commission on this share.
+    """
+    applicationFeePercent: Optional[str] = Field(None, examples=["20.0000"])
+    feeVes: Optional[str] = Field(None, examples=["180.00"])
+    """
+    This share's part of the VEX Pay fee (null until completed).
+    """
+    netVes: Optional[str] = Field(None, examples=["4620.00"])
+    """
+    Credited to the merchant (null until completed; 0.00 when the share nets nothing).
+    """
+    reference: Optional[str] = Field(None, examples=["order-1042/provider-a"])
 
 
 class C2pIntentResponseDto(BaseModel):
@@ -1942,6 +2020,10 @@ class C2pIntentResponseDto(BaseModel):
     """
     Present when the pay-in was sent with `onwardPayout`.
     """
+    splits: Optional[list[PaymentSplitViewDto]] = None
+    """
+    Multi-merchant split payments only: each merchant share with its commission, VEX Pay fee and net (feeVes / netVes are set when the payment completes). Omitted for every other payment.
+    """
     intentId: str
     """
     Use this value as intentId when executing the C2P charge.
@@ -1996,6 +2078,10 @@ class C2pPaymentDto(BaseModel):
     onwardPayout: Optional[OnwardPayoutDto] = None
     """
     Convert this payment's net VES to USDT once it completes and send it to this wallet. Needs USDT and conversions enabled; not allowed with merchantId. See the "Pay in bolívars, receive USDT" guide.
+    """
+    splits: Optional[list[SplitShareDto]] = Field(None, max_length=10, min_length=1)
+    """
+    Split this payment between up to 10 of your merchants (marketplace). Each merchant is credited its share minus its part of the VEX Pay fee and your commission when the bank confirms the payment; the rest stays with your account. Not with merchantId / applicationFeeVes / applicationFeePercent, and not with onwardPayout. See the "Marketplace: split one payment between comercios" guide.
     """
 
 
@@ -2057,6 +2143,10 @@ class PaymentReceiptDto(BaseModel):
     """
     Present when the pay-in was sent with `onwardPayout`.
     """
+    splits: Optional[list[PaymentSplitViewDto]] = None
+    """
+    Multi-merchant split payments only: each merchant share with its commission, VEX Pay fee and net (feeVes / netVes are set when the payment completes). Omitted for every other payment.
+    """
 
 
 class VposPaymentDto(BaseModel):
@@ -2109,6 +2199,10 @@ class VposPaymentDto(BaseModel):
     )
     """
     Optional percent of vesAmount used when applicationFeeVes is omitted. When both are omitted and merchantId is set, the merchant's commission (or the tenant default commission) applies.
+    """
+    splits: Optional[list[SplitShareDto]] = Field(None, max_length=10, min_length=1)
+    """
+    Split this payment between up to 10 of your merchants (marketplace). Each merchant is credited its share minus its part of the VEX Pay fee and your commission when the bank confirms the payment; the rest stays with your account. Not with merchantId / applicationFeeVes / applicationFeePercent, and not with onwardPayout. See the "Marketplace: split one payment between comercios" guide.
     """
 
 
@@ -2196,6 +2290,10 @@ class PagoMovilVerifyDto(BaseModel):
     onwardPayout: Optional[OnwardPayoutDto] = None
     """
     Convert this payment's net VES to USDT once it completes and send it to this wallet. Needs USDT and conversions enabled; not allowed with merchantId. See the "Pay in bolívars, receive USDT" guide.
+    """
+    splits: Optional[list[SplitShareDto]] = Field(None, max_length=10, min_length=1)
+    """
+    Split this payment between up to 10 of your merchants (marketplace). Each merchant is credited its share minus its part of the VEX Pay fee and your commission when the bank confirms the payment; the rest stays with your account. Not with merchantId / applicationFeeVes / applicationFeePercent, and not with onwardPayout. See the "Marketplace: split one payment between comercios" guide.
     """
 
 
@@ -2396,6 +2494,10 @@ class CreateMerchantDto(BaseModel):
     """
     Optional 11-digit local Pago Móvil phone for the first payout method. Provide together with bankCode, or omit both.
     """
+    autoPayoutEnabled: Optional[bool] = None
+    """
+    Pay this merchant's available balance automatically every 15 minutes. Omit it to use your account's `merchantAutoPayoutDefault` (GET /v1/marketplace/settings). Used only when the merchant is created; change it later with PATCH /v1/merchants/{id}.
+    """
 
 
 class CreatePayoutMethodDto(BaseModel):
@@ -2507,6 +2609,10 @@ class MerchantMovementDto(BaseModel):
     `credit` rows: the transferKey you sent.
     """
     paymentId: Optional[str] = None
+    splitReference: Optional[str] = Field(None, examples=["order-1042/provider-a"])
+    """
+    `credit` rows of a multi-merchant split payment: the share `reference` sent with the payment.
+    """
     payoutId: Optional[str] = None
     availableAt: Optional[AwareDatetime] = None
     """
@@ -2571,6 +2677,31 @@ class UpdateMerchantDto(BaseModel):
     """
     Negotiated marketplace commission (percent of vesAmount) retained from payments tagged with this merchant when the request sends no applicationFeeVes / applicationFeePercent. null clears the override so the tenant's default commission applies.
     """
+
+
+class MarketplaceSettingsDto(BaseModel):
+    merchantAutoPayoutDefault: bool = Field(..., examples=[True])
+    """
+    When true, merchants you create without `autoPayoutEnabled` start with auto-payout on. Existing merchants keep their setting.
+    """
+    merchantAutoPayoutMinUsd: Optional[str] = Field(None, examples=["10.00"])
+    """
+    Smallest available balance, in USD at the BCV rate, that an automatic merchant payout sends. null = no minimum (any balance of Bs 1 or more).
+    """
+
+
+class UpdateMarketplaceSettingsDto(BaseModel):
+    merchantAutoPayoutDefault: Optional[bool] = Field(None, examples=[True])
+    merchantAutoPayoutMinUsd: Optional[str] = Field(None, examples=["10.00"])
+    """
+    USD with at most two decimals (string or number), 0–100000. null or 0 clears the minimum.
+    """
+
+
+class NotificationTestResponseDto(BaseModel):
+    sent: bool = Field(..., examples=[True])
+    event: str = Field(..., examples=["notification.test"])
+    tenantId: str
 
 
 class CreateCheckoutSessionDto(BaseModel):
@@ -2703,7 +2834,7 @@ class PaymentLinkListResponseDto(BaseModel):
 
 
 class CreateProductDto(BaseModel):
-    name: str = Field(..., examples=["Camiseta VEXPay"], max_length=120)
+    name: str = Field(..., examples=["Camiseta VEX Pay"], max_length=120)
     description: Optional[str] = Field(None, max_length=2000)
     imageUrl: Optional[str] = Field(None, examples=["https://cdn.example/shirt.png"])
     priceUsd: str = Field(..., examples=["20.00"])
@@ -2829,12 +2960,6 @@ class TopupListDto(BaseModel):
     monthlyCapUsd: Optional[str] = Field(..., examples=["3000.00"])
     monthUsedUsd: str = Field(..., examples=["500.00"])
     monthRemainingUsd: str = Field(..., examples=["2500.00"])
-
-
-class NotificationTestResponseDto(BaseModel):
-    sent: bool = Field(..., examples=[True])
-    event: str = Field(..., examples=["notification.test"])
-    tenantId: str
 
 
 class CreateCustomerDto(BaseModel):
@@ -3098,7 +3223,7 @@ class InvoiceListResponseDto(BaseModel):
 class PayInvoiceDto(BaseModel):
     paidOutOfBand: bool = Field(..., examples=[True])
     """
-    Mark the invoice paid outside VEXPay (cash, transfer). No balance change.
+    Mark the invoice paid outside VEX Pay (cash, transfer). No balance change.
     """
 
 

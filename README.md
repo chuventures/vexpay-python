@@ -1,9 +1,9 @@
-# VEXPay Python SDK
+# VEX Pay Python SDK
 
-The official Python library for the [VEXPay](https://vexpay.app) API: accept Venezuelan payments (Pago Móvil C2P, cards, débito inmediato), pay out to merchants, create checkout sessions, and verify signed webhooks.
+The official Python library for the [VEX Pay](https://vexpay.app) API: accept Venezuelan payments (Pago Móvil C2P, cards, débito inmediato), pay out to merchants, create checkout sessions, and verify signed webhooks.
 
 - Sync (`VexPay`) and async (`AsyncVexPay`) clients with the same methods
-- Typed Pydantic v2 models generated from the VEXPay OpenAPI contract
+- Typed Pydantic v2 models generated from the VEX Pay OpenAPI contract
 - Safe retries: every `POST` carries an `Idempotency-Key`, so a retried charge never charges twice
 - Auto-pagination
 - Webhook signature verification with replay protection
@@ -54,7 +54,7 @@ print(payment.paymentId, payment.status)  # "COMPLETED" or "PENDING" — confirm
 
 ## Checkout sessions (hosted or embedded)
 
-Let VEXPay collect the payment details. Redirect the buyer to `url`, or embed the checkout on your own site with [`@vexpay/js`](https://www.npmjs.com/package/@vexpay/js) and the one-time `clientSecret`.
+Let VEX Pay collect the payment details. Redirect the buyer to `url`, or embed the checkout on your own site with [`@vexpay/js`](https://www.npmjs.com/package/@vexpay/js) and the one-time `clientSecret`.
 
 ```python
 from vexpay import VexPay
@@ -82,7 +82,7 @@ The hosted page lets the buyer pick the currency — bolívares, stablecoins or 
 
 ## USDT
 
-USDT settles in USDT, into your VEXPay USDT balance (never converted to VES). It must be enabled on your account — otherwise these calls fail with `method_not_allowed` (403). Pay-ins cost 2.5 % + 0.50 USDT; payouts cost the network fee listed by `crypto.networks.list()`.
+USDT settles in USDT, into your VEX Pay USDT balance (never converted to VES). It must be enabled on your account — otherwise these calls fail with `method_not_allowed` (403). Pay-ins cost 2.5 % + 0.50 USDT; payouts cost the network fee listed by `crypto.networks.list()`.
 
 ```python
 from vexpay import VexPay, VexPayError
@@ -135,7 +135,7 @@ Responses and events include `currency`, `amount` and `fee` for both coins (`amo
 
 ## Convert VES or COP to USDT
 
-Turn available VES or Colombian pesos into your USDT balance. A quote locks the rate (market USDT rate in that currency plus your spread) for 60 seconds; accepting it debits the source at once (`conversion.created`) and returns a `PENDING` conversion. VEXPay then delivers the USDT and sends `conversion.completed` (or `conversion.canceled`, with the VES or COP returned). Conversions are on for every account that has USDT enabled (COP also needs COP enabled) — otherwise the calls fail with `conversions_not_enabled` (403). In test mode they complete immediately. COP amounts are whole pesos.
+Turn available VES or Colombian pesos into your USDT balance. A quote locks the rate (market USDT rate in that currency plus your spread) for 60 seconds; accepting it debits the source at once (`conversion.created`) and returns a `PENDING` conversion. VEX Pay then delivers the USDT and sends `conversion.completed` (or `conversion.canceled`, with the VES or COP returned). Conversions are on for every account that has USDT enabled (COP also needs COP enabled) — otherwise the calls fail with `conversions_not_enabled` (403). In test mode they complete immediately. COP amounts are whole pesos.
 
 ```python
 quote = vexpay.conversions.quotes.create({"sourceAmountVes": "10000.00"})  # or {"targetAmountUsdt": "50.00"}
@@ -219,7 +219,7 @@ With a test API key, VPOS test cards return a fixed outcome without reaching the
 
 ## Webhooks
 
-VEXPay signs every delivery with a `VexPay-Signature` header. Verify it with the **raw** request body — parsing and re-serializing JSON changes the bytes and breaks the signature (Flask: `request.get_data()`, Django: `request.body`, FastAPI: `await request.body()`).
+VEX Pay signs every delivery with a `VexPay-Signature` header. Verify it with the **raw** request body — parsing and re-serializing JSON changes the bytes and breaks the signature (Flask: `request.get_data()`, Django: `request.body`, FastAPI: `await request.body()`).
 
 ```python
 import os

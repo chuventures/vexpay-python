@@ -149,7 +149,7 @@ class _Config:
     ) -> None:
         if not isinstance(api_key, str) or not api_key.strip():
             raise ConfigurationError(
-                "A VEXPay API key is required: VexPay(api_key=os.environ['VEXPAY_API_KEY'])."
+                "A VEX Pay API key is required: VexPay(api_key=os.environ['VEXPAY_API_KEY'])."
             )
         self.api_key = api_key.strip()
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
@@ -196,8 +196,8 @@ def _result(response: httpx.Response) -> tuple[Any, Optional[VexPayError], Optio
 
 def _transport_error(exc: httpx.HTTPError, timeout: float) -> VexPayError:
     if isinstance(exc, httpx.TimeoutException):
-        return APITimeoutError(f"Request to VEXPay timed out after {timeout}s")
-    return APIConnectionError(f"Could not reach VEXPay: {exc}")
+        return APITimeoutError(f"Request to VEX Pay timed out after {timeout}s")
+    return APIConnectionError(f"Could not reach VEX Pay: {exc}")
 
 
 class SyncHttp:

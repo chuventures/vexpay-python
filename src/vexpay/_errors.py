@@ -56,7 +56,7 @@ class RateLimitError(VexPayError):
 
 
 class APIError(VexPayError):
-    """5xx — VEXPay or an upstream bank failed. Retried automatically before surfacing."""
+    """5xx — VEX Pay or an upstream bank failed. Retried automatically before surfacing."""
 
 
 class APIConnectionError(VexPayError):
@@ -86,7 +86,7 @@ def _message_from(body: Any, status: int) -> str:
             return error
     if isinstance(body, str) and body:
         return body
-    return f"VEXPay API responded with HTTP {status}"
+    return f"VEX Pay API responded with HTTP {status}"
 
 
 def error_from_response(status: int, body: Any, request_id: Optional[str] = None) -> VexPayError:
