@@ -96,6 +96,9 @@ class PaymentWebhookData(BaseModel):
     method: Optional[str] = None
     usdAmount: Optional[float] = None
     vesAmount: Optional[float] = None
+    # Pago Móvil only, set when the payer sent more than asked (up to Bs 500 more is accepted): the
+    # bolívar amount originally asked. vesAmount / usdAmount are then what arrived.
+    requestedVesAmount: Optional[float] = None
     bcvRate: Optional[float] = None
     # Rate the payment was priced at (BCV, or the market rate for MARKET accounts).
     rate: Optional[float] = None

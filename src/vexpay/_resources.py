@@ -694,8 +694,7 @@ class Crypto(SyncAPIResource):
         return self._request_model("Crypto_simulateDeposit", m.SimulatedDepositDto, body=params, options=options)
 
 class CopPayments(SyncAPIResource):
-    """Colombian peso payments: PSE and Bancolombia (bank redirect), Bancolombia QR, Bre-B (QR / transfer
-    key), Nequi (push approval) or Daviplata (SMS code or redirect). Cards are taken only on the hosted checkout.
+    """Colombian peso payments: Bre-B (QR / transfer key), Nequi (push approval) or Daviplata (SMS code).
 
     Payments complete asynchronously — listen for ``payment.completed`` / ``payment.failed``.
     COP must be enabled on your account (403 ``method_not_allowed`` otherwise).
@@ -706,9 +705,7 @@ class CopPayments(SyncAPIResource):
     ) -> m.CopPaymentDto:
         """Create a payment in whole pesos; ``buyer`` is required for every channel except ``breb``.
 
-        Send ``buyer.termsAccepted: true`` when ``cop.channels()`` says ``needsTermsAcceptance``; ``pse`` also
-        needs ``pse.bankCode``. ``next.type`` says what the buyer does: ``show_qr``, ``approve_in_app``,
-        ``submit_otp``, ``redirect`` (send them to ``next.url``) or ``redirect_pending`` (retrieve again shortly).
+        ``next.type`` says what the buyer does: ``show_qr``, ``approve_in_app`` or ``submit_otp``.
         Pass ``idempotency_key`` to retry safely.
         """
         return self._request_model("CopPayments_create", m.CopPaymentDto, body=params, options=options)
@@ -727,9 +724,9 @@ class CopPayments(SyncAPIResource):
         return self._request_model("CopPayments_cancel", m.CopPaymentDto, path={"id": id}, options=options)
 
     def refund(self, id: str, **options: Unpack[RequestOptions]) -> m.CopPaymentDto:
-        """Full refund of a completed payment (card within 24 h, Bre-B within 96 h).
+        """Full refund of a completed payment, within 96 hours of completion.
 
-        Channels that cannot be refunded through the API fail with ``refund_not_supported``.
+        A payment that can no longer be refunded through the API fails with ``refund_not_supported``.
         """
         return self._request_model("CopPayments_refund", m.CopPaymentDto, path={"id": id}, options=options)
 
@@ -742,7 +739,7 @@ class CopBalance(SyncAPIResource):
 
 
 class Cop(SyncAPIResource):
-    """Collect Colombian pesos (PSE, Bancolombia, Bre-B, Nequi, Daviplata; cards via the hosted checkout)."""
+    """Collect Colombian pesos (Bre-B, Nequi, Daviplata)."""
 
     def __init__(self, http: Any) -> None:
         super().__init__(http)
@@ -750,7 +747,7 @@ class Cop(SyncAPIResource):
         self.balance = CopBalance(self._http)
 
     def channels(self, **options: Unpack[RequestOptions]) -> m.CopChannelsDto:
-        """Channels you can use right now, with what each needs, plus the PSE banks and terms links."""
+        """Channels you can use right now, with what each needs."""
         return self._request_model("CopPayments_channels", m.CopChannelsDto, options=options)
 
 

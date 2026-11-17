@@ -340,28 +340,28 @@ def test_cop_payment_otp_cancel_refund_and_balance(server: MockServer) -> None:
     assert server.requests[5].path == "/v1/cop/balance"
 
 
-def test_cop_channels_then_pse_redirect(server: MockServer) -> None:
+def test_cop_channels_then_nequi_push(server: MockServer) -> None:
     server.script([
         Scripted(200, {
-            "channels": [{"channel": "pse", "label": "PSE", "needsBuyer": True, "needsTermsAcceptance": True, "checkoutOnly": False, "minAmountCop": 20000}],
-            "pseBanks": [{"code": "1007", "name": "Bancolombia"}],
-            "terms": {"termsUrl": "https://t", "personalDataUrl": "https://d"},
+            "channels": [
+                {"channel": "breb", "label": "Bre-B", "needsBuyer": False, "minAmountCop": 20000},
+                {"channel": "nequi", "label": "Nequi", "needsBuyer": True, "minAmountCop": 20000},
+                {"channel": "daviplata", "label": "Daviplata", "needsBuyer": True, "minAmountCop": 20000},
+            ],
         }),
-        Scripted(201, {**COP_PAYMENT, "channel": "pse", "next": {"type": "redirect", "url": "https://bank.example/pse"}}),
+        Scripted(201, {**COP_PAYMENT, "channel": "nequi", "next": {"type": "approve_in_app", "phoneMasked": "****567"}}),
     ])
     client = VexPay("k", base_url=server.url)
     catalog = client.cop.channels()
     assert server.requests[0].path == "/v1/cop/channels"
-    assert catalog.channels[0].needsTermsAcceptance is True
-    assert catalog.pseBanks is not None and catalog.pseBanks[0].code == "1007"
+    assert [c.channel for c in catalog.channels] == ["breb", "nequi", "daviplata"]
     buyer = {
-        "firstName": "Juan", "lastName": "Pérez", "personType": "natural", "email": "juan@example.com",
-        "phone": "3001234567", "documentType": "CC", "documentNumber": "1234567890", "termsAccepted": True,
+        "firstName": "Juan", "lastName": "Pérez", "email": "juan@example.com",
+        "phone": "3001234567", "documentType": "CC", "documentNumber": "1234567890",
     }
-    payment = client.cop.payments.create({"amountCop": 80000, "channel": "pse", "pse": {"bankCode": "1007"}, "buyer": buyer})
-    assert payment.next is not None and payment.next.type == "redirect" and payment.next.url == "https://bank.example/pse"
-    assert server.requests[1].body["pse"] == {"bankCode": "1007"}
-    assert server.requests[1].body["buyer"]["termsAccepted"] is True
+    payment = client.cop.payments.create({"amountCop": 80000, "channel": "nequi", "buyer": buyer})
+    assert payment.next is not None and payment.next.type == "approve_in_app" and payment.next.phoneMasked == "****567"
+    assert server.requests[1].body["channel"] == "nequi"
 
 
 # ── billing ───────────────────────────────────────────────────────────────────

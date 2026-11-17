@@ -641,6 +641,10 @@ class TenantPayoutAccountVerifyStartResponseDto(BaseModel):
     status: Literal["verifying"]
     expiresAt: AwareDatetime
     accountId: str
+    testAmounts: Optional[list[str]] = Field(None, examples=[["0.13", "0.27"]])
+    """
+    Test mode only: the two sandbox micro-deposit amounts to confirm (no money is sent in Test). Never present in live mode.
+    """
 
 
 class TenantPayoutAccountVerifyConfirmResponseDto(BaseModel):
@@ -1357,16 +1361,8 @@ class CryptoPayoutDto(BaseModel):
 
 
 class CopChannelDto(BaseModel):
-    channel: Literal[
-        "breb",
-        "nequi",
-        "daviplata",
-        "card",
-        "pse",
-        "bancolombia_transfer",
-        "bancolombia_qr",
-    ] = Field(..., examples=["pse"])
-    label: str = Field(..., examples=["PSE"])
+    channel: Literal["breb", "nequi", "daviplata"] = Field(..., examples=["nequi"])
+    label: str = Field(..., examples=["Nequi"])
     """
     Buyer-facing name (Spanish).
     """
@@ -1374,43 +1370,11 @@ class CopChannelDto(BaseModel):
     """
     A `buyer` object is required.
     """
-    needsTermsAcceptance: bool = Field(..., examples=[True])
-    """
-    Show the buyer the `terms` links and send `buyer.termsAccepted: true`.
-    """
-    checkoutOnly: bool = Field(..., examples=[False])
-    """
-    Only through the hosted checkout (checkout sessions or payment links), never `POST /v1/cop/payments`.
-    """
     minAmountCop: float = Field(..., examples=[20000])
-
-
-class CopPseBankDto(BaseModel):
-    code: str = Field(..., examples=["1007"])
-    name: str = Field(..., examples=["Bancolombia"])
-
-
-class CopTermsDto(BaseModel):
-    termsUrl: str
-    """
-    Terms and conditions the buyer accepts.
-    """
-    personalDataUrl: str
-    """
-    Personal data processing authorization the buyer accepts.
-    """
 
 
 class CopChannelsDto(BaseModel):
     channels: list[CopChannelDto]
-    pseBanks: Optional[list[CopPseBankDto]] = None
-    """
-    Present when `pse` is listed: banks for `pse.bankCode`.
-    """
-    terms: Optional[CopTermsDto] = None
-    """
-    Present when a listed channel needs terms acceptance.
-    """
 
 
 class CopBuyerDto(BaseModel):
@@ -1434,23 +1398,6 @@ class CopBuyerDto(BaseModel):
     """
     National document number. Required for every channel except `breb`.
     """
-    personType: Optional[Literal["natural", "juridica"]] = Field(
-        None, examples=["natural"]
-    )
-    """
-    PSE only (required): `natural` person or `juridica` (company).
-    """
-    termsAccepted: Optional[bool] = Field(None, examples=[True])
-    """
-    Required (`true`) for channels the channel catalog marks `needsTermsAcceptance`: confirms you showed the buyer the catalog `terms` links.
-    """
-
-
-class CopPseDto(BaseModel):
-    bankCode: str = Field(..., examples=["1007"])
-    """
-    Bank code from `GET /v1/cop/channels` → `pseBanks`.
-    """
 
 
 class CreateCopPaymentDto(BaseModel):
@@ -1458,17 +1405,9 @@ class CreateCopPaymentDto(BaseModel):
     """
     Amount in whole Colombian pesos. At least 20,000 (`amount_below_minimum` otherwise).
     """
-    channel: Literal[
-        "breb",
-        "nequi",
-        "daviplata",
-        "card",
-        "pse",
-        "bancolombia_transfer",
-        "bancolombia_qr",
-    ] = Field(..., examples=["breb"])
+    channel: Literal["breb", "nequi", "daviplata"] = Field(..., examples=["breb"])
     """
-    `breb`: QR code / transfer key the buyer pays from any Colombian bank app. `nequi`: push to the buyer's Nequi app. `daviplata`: SMS code the buyer reads to you, or a redirect. `pse` and `bancolombia_transfer`: redirect to the buyer's bank. `bancolombia_qr`: QR the buyer scans in the Bancolombia app. `card`: hosted checkout only (`channel_requires_checkout`).
+    `breb`: QR code / transfer key the buyer pays from any Colombian bank app. `nequi`: push to the buyer's Nequi app. `daviplata`: SMS code the buyer reads to you.
     """
     description: Optional[str] = Field(None, examples=["Order 1042"], max_length=255)
     """
@@ -1486,35 +1425,16 @@ class CreateCopPaymentDto(BaseModel):
     """
     Required for every channel except `breb`.
     """
-    pse: Optional[CopPseDto] = None
-    """
-    Required for `pse`.
-    """
 
 
 class CopNextActionDto(BaseModel):
-    type: Literal[
-        "show_qr",
-        "approve_in_app",
-        "submit_otp",
-        "redirect",
-        "redirect_pending",
-        "processing",
-    ]
+    type: Literal["show_qr", "approve_in_app", "submit_otp"]
     """
-    `redirect`: send the buyer to `url` to authorize at their bank. `redirect_pending`: the URL is not ready yet — read the payment again. `processing`: nothing to do, the outcome follows.
+    `show_qr`: Bre-B QR / transfer key. `approve_in_app`: the buyer approves the Nequi push. `submit_otp`: send the Daviplata SMS code.
     """
     qrPngBase64: Optional[str] = None
     """
     Bre-B: base64 PNG of the payment QR. Returned only when the payment is created.
-    """
-    qrSvgBase64: Optional[str] = None
-    """
-    Bancolombia QR: base64 SVG of the payment QR.
-    """
-    url: Optional[str] = Field(None, examples=["https://…"])
-    """
-    `redirect`: where the buyer authorizes the payment.
     """
     transferKey: Optional[str] = None
     """
@@ -1530,15 +1450,7 @@ class CopPaymentDto(BaseModel):
     id: str
     status: Literal["pending", "completed", "failed", "canceled", "refunded"]
     method: Literal["COP"]
-    channel: Literal[
-        "breb",
-        "nequi",
-        "daviplata",
-        "card",
-        "pse",
-        "bancolombia_transfer",
-        "bancolombia_qr",
-    ]
+    channel: Literal["breb", "nequi", "daviplata"]
     amountCop: float = Field(..., examples=[100000])
     feeCop: Optional[float] = Field(None, examples=[3500])
     """
@@ -1555,25 +1467,14 @@ class CopPaymentDto(BaseModel):
     reference: Optional[str] = Field(None, examples=["order-1042"])
     metadata: dict[str, str]
     failureCode: Optional[
-        Literal[
-            "expired", "rejected", "processor_error", "processor_unknown", "chargeback"
-        ]
+        Literal["expired", "rejected", "processor_error", "processor_unknown"]
     ] = None
-    """
-    `chargeback`: a refunded card payment the buyer disputed with their bank.
-    """
     expiresAt: Optional[AwareDatetime] = None
     createdAt: AwareDatetime
     completedAt: Optional[AwareDatetime] = None
     next: Optional[CopNextActionDto] = None
     """
-    What the buyer must do next. Returned when the payment is created, and on reads while a bank redirect or QR is pending.
-    """
-    card: Optional[dict[str, Any]] = Field(
-        None, examples=[{"brand": "VISA", "last4": "4242"}]
-    )
-    """
-    Card payments: brand and last 4 digits, once known.
+    What the buyer must do next. Returned when the payment is created.
     """
 
 
@@ -2433,6 +2334,10 @@ class VerifyStartResponseDto(BaseModel):
     status: str = Field(..., examples=["verifying"])
     expiresAt: str = Field(..., examples=["2026-07-22T02:30:00Z"])
     payoutMethodId: Optional[str] = None
+    testAmounts: Optional[list[str]] = Field(None, examples=[["0.13", "0.27"]])
+    """
+    Test mode only: the two sandbox micro-deposit amounts to confirm (no money is sent in Test). Never present in live mode.
+    """
 
 
 class VerifyConfirmResponseDto(BaseModel):
@@ -2705,9 +2610,13 @@ class NotificationTestResponseDto(BaseModel):
 
 
 class CreateCheckoutSessionDto(BaseModel):
-    amountUsd: float = Field(..., examples=[25], ge=0.01, le=100000.0)
+    amountUsd: Optional[float] = Field(None, examples=[25], ge=0.01, le=100000.0)
     """
-    USD amount, up to 2 decimals.
+    USD amount, up to 2 decimals. Send exactly one of `amountUsd` or `amountVes`.
+    """
+    amountVes: Optional[float] = Field(None, examples=[2000], ge=0.01, le=100000000.0)
+    """
+    Exact bolívar amount, up to 2 decimals: Pago Móvil, Débito Inmediato and card charge exactly this, whatever the rate. `amountUsd` is then derived at your Bolívar rate. Send exactly one of `amountUsd` or `amountVes`; `cop` is not offered.
     """
     description: Optional[str] = Field(None, examples=["Pedido #1042"], max_length=200)
     """
@@ -2767,6 +2676,13 @@ class CheckoutSessionResponseDto(BaseModel):
     """
     url: str = Field(..., examples=["https://pay.vexpay.app/pay/cs-9f2a4b7c1d3e"])
     amountUsd: str = Field(..., examples=["25.00"])
+    """
+    USD amount; for a bolívar-priced session, `amountVes` at your Bolívar rate when it was created.
+    """
+    amountVes: Optional[str] = Field(None, examples=["2000.00"])
+    """
+    Exact bolívar amount charged, for a session created with `amountVes`; null otherwise.
+    """
     description: Optional[str] = None
     reference: Optional[str] = None
     metadata: dict[str, str]

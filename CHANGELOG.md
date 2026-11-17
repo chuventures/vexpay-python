@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.0
+
+- Checkout sessions: `CreateCheckoutSessionDto.amountVes` charges an exact bolívar amount (Pago Móvil, Débito Inmediato and card charge exactly that, whatever the rate). Send exactly one of `amountUsd` or `amountVes`; `amountUsd` is now optional. `CheckoutSessionResponseDto.amountVes` is the Bs amount (`null` for USD-priced sessions).
+- Webhooks: `PaymentWebhookData.requestedVesAmount` (optional). Set on a Pago Móvil `payment.completed` when the payer sent more than asked (up to Bs 500 more is accepted): the bolívar amount originally asked; `vesAmount` / `usdAmount` are then what arrived.
+- COP: Bre-B, Nequi and Daviplata are the only Colombian peso channels (card, PSE and Bancolombia transfer / QR were removed with their processor). Generated models drop `CopPseDto`, `CopPseBankDto`, `CopTermsDto`, `CopBuyerDto.personType` / `termsAccepted`, `CopChannelDto.needsTermsAcceptance` / `checkoutOnly`, `CopChannelsDto.pseBanks` / `terms` and the `redirect` / `redirect_pending` next steps. Refunds are accepted within 96 hours on every channel.
+
 ## 0.17.0
 
 - Marketplace: `splits` (up to 10 shares: `merchantId`, `amount`, optional `applicationFeeVes` / `applicationFeePercent`, `reference`; `SplitShareDto`) on débito execute, C2P request / execute, Pago Móvil verify and VPOS create. Payments read back `splits` (`PaymentSplitViewDto`) with each share's commission, VEX Pay fee and net.
