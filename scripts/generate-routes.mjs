@@ -34,7 +34,7 @@ const models = rows
 
 writeFileSync(
   output,
-  `# Generated from packages/sdk-spec/openapi.json by scripts/generate-routes.mjs — do not edit.
+  `# Generated from packages/vexpay/sdk-spec/openapi.json by scripts/generate-routes.mjs — do not edit.
 from __future__ import annotations
 
 from typing import Optional

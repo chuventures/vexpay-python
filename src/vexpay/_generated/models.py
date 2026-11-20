@@ -1,4 +1,4 @@
-# Generated from packages/sdk-spec/openapi.json by scripts/generate-models.sh — do not edit.
+# Generated from packages/vexpay/sdk-spec/openapi.json by scripts/generate-models.sh — do not edit.
 
 
 from __future__ import annotations
@@ -376,9 +376,11 @@ class PayoutResponseDto(BaseModel):
     """
     `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit` or `rejected_bank_unfunded`, funds returned) when rejected.
     """
-    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT", "BANK_UNFUNDED"]] = None
+    holdReason: Optional[
+        Literal["NEW_ACCOUNT_LIMIT", "FIRST_PAYOUTS", "BANK_UNFUNDED"]
+    ] = None
     """
-    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent). `BANK_UNFUNDED`: VEX Pay could not send the transfer right away on its side; it is sent once reviewed, or rejected with `rejected_bank_unfunded` and the funds returned.
+    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent). `FIRST_PAYOUTS`: the first payout of a seller, or one in its first days of sales, when VEX Pay has turned that review on; rejected with `rejected_first_payouts` and the funds returned. `BANK_UNFUNDED`: VEX Pay could not send the transfer right away on its side; it is sent once reviewed, or rejected with `rejected_bank_unfunded` and the funds returned.
     """
     reference: Optional[str] = None
     """
@@ -453,9 +455,11 @@ class PayoutBatchItemResultDto(BaseModel):
     """
     `pending` means the credit is still reconciling (AC00); subscribe to payout webhooks or poll GET /v1/payouts/:id. `awaiting_approval` means the funds are reserved but the payout is held for VEX Pay review (see `holdReason`) and has not been sent; it later becomes `pending`/`completed` when approved or `failed` (`rejected_new_account_limit` or `rejected_bank_unfunded`, funds returned) when rejected.
     """
-    holdReason: Optional[Literal["NEW_ACCOUNT_LIMIT", "BANK_UNFUNDED"]] = None
+    holdReason: Optional[
+        Literal["NEW_ACCOUNT_LIMIT", "FIRST_PAYOUTS", "BANK_UNFUNDED"]
+    ] = None
     """
-    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent). `BANK_UNFUNDED`: VEX Pay could not send the transfer right away on its side; it is sent once reviewed, or rejected with `rejected_bank_unfunded` and the funds returned.
+    Why the payout was held for review. `NEW_ACCOUNT_LIMIT`: the tenant or merchant is new (first 30 days) and this payout would take its rolling 24h money-out above the new-account cap (default US$300 equivalent). `FIRST_PAYOUTS`: the first payout of a seller, or one in its first days of sales, when VEX Pay has turned that review on; rejected with `rejected_first_payouts` and the funds returned. `BANK_UNFUNDED`: VEX Pay could not send the transfer right away on its side; it is sent once reviewed, or rejected with `rejected_bank_unfunded` and the funds returned.
     """
     reference: Optional[str] = None
     """
@@ -669,7 +673,7 @@ class UpsertTenantPayoutAccountDto(BaseModel):
     """
     Beneficiary (account holder) cédula/RIF.
     """
-    telefono: Optional[str] = Field(None, examples=["584121234567"])
+    telefono: Optional[str] = Field(None, examples=["584121873562"])
     """
     Beneficiary Pago Móvil phone (58… or 0…). Required for `pago_movil`.
     """
@@ -786,7 +790,7 @@ class R4OperationResponseDto(BaseModel):
 
 
 class Credit(BaseModel):
-    telefono: str = Field(..., examples=["584121234567"])
+    telefono: str = Field(..., examples=["584121873562"])
     code: str = Field(..., examples=["ACCP"])
     reference: Optional[str] = Field(None, examples=["16142940"])
     id: Optional[str] = None
@@ -880,7 +884,7 @@ class GenerateDebitOtpDto(BaseModel):
     """
     Debit amount in VES (not USD).
     """
-    telefono: str = Field(..., examples=["584121234567"])
+    telefono: str = Field(..., examples=["584121873562"])
     """
     Payer mobile: 58 + 10 digits, or 0 + 10 digits local form.
     """
@@ -926,7 +930,7 @@ class ImmediateDebitDto(BaseModel):
     """
     Debit amount in VES (not USD).
     """
-    telefono: str = Field(..., examples=["584121234567"])
+    telefono: str = Field(..., examples=["584121873562"])
     """
     Payer mobile: 58 + 10 digits, or 0 + 10 digits local form.
     """
@@ -991,7 +995,7 @@ class ImmediateCreditDto(BaseModel):
     """
     Beneficiary cédula/RIF.
     """
-    telefono: str = Field(..., examples=["584121234567"])
+    telefono: str = Field(..., examples=["584121873562"])
     """
     Beneficiary Pago Móvil phone (58… or 0…).
     """
@@ -1035,7 +1039,7 @@ class CreditRecipientDto(BaseModel):
     """
     Recipient cédula/RIF.
     """
-    telefono: str = Field(..., examples=["584121234567"])
+    telefono: str = Field(..., examples=["584121873562"])
     """
     Recipient Pago Móvil phone.
     """
@@ -1105,7 +1109,7 @@ class PayoutDto(BaseModel):
 
 
 class ChangePaymentDto(BaseModel):
-    telefonoDestino: str = Field(..., examples=["584121234567"])
+    telefonoDestino: str = Field(..., examples=["584121873562"])
     """
     Customer phone that receives the change (vuelto).
     """
@@ -1755,7 +1759,7 @@ class C2pRequestDto(BaseModel):
     VES amount debited at the bank. When set, locks the bolívar charge and derives USD at your Bolívar rate (it wins over usdAmount). The intent keeps this amount until it is executed.
     """
     debtorId: str = Field(..., examples=["V12345678"])
-    debtorCellPhone: str = Field(..., examples=["584121234567"])
+    debtorCellPhone: str = Field(..., examples=["584121873562"])
     """
     Country code 58 followed by 10 digits.
     """
@@ -1900,7 +1904,7 @@ class C2pIntentResponseDto(BaseModel):
     bankReference: Optional[str] = Field(None, examples=["00512673"])
     bankTxId: Optional[float] = Field(None, examples=[842901])
     debtorId: Optional[str] = Field(None, examples=["V12345678"])
-    debtorPhone: Optional[str] = Field(None, examples=["584121234567"])
+    debtorPhone: Optional[str] = Field(None, examples=["584121873562"])
     debtorBankCode: Optional[float] = Field(None, examples=[102])
     debtorBankName: Optional[str] = Field(None, examples=["Banco de Venezuela"])
     cardLast4: Optional[str] = Field(None, examples=["4242"])
@@ -1949,7 +1953,7 @@ class C2pPaymentDto(BaseModel):
     VES amount debited at the bank. When set, locks the bolívar charge and derives USD at your Bolívar rate (it wins over usdAmount). With intentId the amount locked on the intent is charged; amounts sent here must match it (±0.01 Bs / ±$0.01).
     """
     debtorId: str = Field(..., examples=["V12345678"])
-    debtorCellPhone: str = Field(..., examples=["584121234567"])
+    debtorCellPhone: str = Field(..., examples=["584121873562"])
     debtorBankCode: float = Field(..., examples=[102])
     """
     Venezuelan bank institution code (e.g. 102, 105, 134). Must match a bank from GET /v1/banks.
@@ -2023,7 +2027,7 @@ class PaymentReceiptDto(BaseModel):
     bankReference: Optional[str] = Field(None, examples=["00512673"])
     bankTxId: Optional[float] = Field(None, examples=[842901])
     debtorId: Optional[str] = Field(None, examples=["V12345678"])
-    debtorPhone: Optional[str] = Field(None, examples=["584121234567"])
+    debtorPhone: Optional[str] = Field(None, examples=["584121873562"])
     debtorBankCode: Optional[float] = Field(None, examples=[102])
     debtorBankName: Optional[str] = Field(None, examples=["Banco de Venezuela"])
     cardLast4: Optional[str] = Field(None, examples=["4242"])
@@ -2144,7 +2148,7 @@ class PagoMovilReceivingAccountDto(BaseModel):
     Four-digit SIMF code of the receiving bank.
     """
     bankName: str = Field(..., examples=["Mi Banco"])
-    phone: Optional[str] = Field(..., examples=["04125555555"])
+    phone: Optional[str] = Field(..., examples=["04125550193"])
     """
     Phone the customer sends the Pago Móvil to (11 digits). Null when not configured.
     """
@@ -2390,12 +2394,12 @@ class CreateMerchantDto(BaseModel):
     V/E+8 or J/G+9
     """
     contactEmail: str = Field(..., examples=["maria@mail.com"])
-    contactPhone: str = Field(..., examples=["04141234567"])
+    contactPhone: str = Field(..., examples=["04141873562"])
     bankCode: Optional[str] = Field(None, examples=["0134"])
     """
     Optional 4-digit SIMF bank code for the first Pago Móvil payout method. Provide together with phone, or omit both to create a merchant shell with no payout method.
     """
-    phone: Optional[str] = Field(None, examples=["04145555555"])
+    phone: Optional[str] = Field(None, examples=["04145550193"])
     """
     Optional 11-digit local Pago Móvil phone for the first payout method. Provide together with bankCode, or omit both.
     """
@@ -2410,7 +2414,7 @@ class CreatePayoutMethodDto(BaseModel):
     """
     4-digit SIMF bank code
     """
-    phone: str = Field(..., examples=["04145555555"])
+    phone: str = Field(..., examples=["04145550193"])
     """
     11-digit local Pago Móvil phone
     """
@@ -2635,6 +2639,12 @@ class CreateCheckoutSessionDto(BaseModel):
     """
     Where a buyer who backs out is sent.
     """
+    successButtonLabel: Optional[str] = Field(
+        None, examples=["Continuar para obtener tu voucher"], max_length=40
+    )
+    """
+    Text of the button that takes the buyer to successUrl after paying (default «Continuar»). Plain text, 1–40 characters after trimming, one line. Requires successUrl.
+    """
     allowedOrigins: Optional[list[str]] = Field(
         None, examples=[["https://shop.example"]]
     )
@@ -2690,6 +2700,10 @@ class CheckoutSessionResponseDto(BaseModel):
     methods: list[Literal["c2p", "pago_movil", "vpos", "usdt", "usdc", "cop"]]
     successUrl: Optional[str] = None
     cancelUrl: Optional[str] = None
+    successButtonLabel: Optional[str] = None
+    """
+    Text of the success button; null = default «Continuar».
+    """
     paymentId: Optional[str] = None
     """
     Latest payment for this session, once one exists.
@@ -2796,7 +2810,7 @@ class CreateTopupDto(BaseModel):
     """
     Bs to load, two decimals, above 0.
     """
-    payerPhone: str = Field(..., examples=["04121234567"])
+    payerPhone: str = Field(..., examples=["04121873562"])
     """
     Phone the Pago Móvil is sent from (Venezuelan mobile, 04XXXXXXXXX).
     """
@@ -2815,7 +2829,7 @@ class TopupReceiverDto(BaseModel):
     """
     Bank code to pick in your bank app. The bank name is not shown.
     """
-    phone: str = Field(..., examples=["04140000000"])
+    phone: str = Field(..., examples=["04142093715"])
     identification: str = Field(..., examples=["J-000000000"])
 
 
@@ -2881,7 +2895,7 @@ class TopupListDto(BaseModel):
 class CreateCustomerDto(BaseModel):
     name: Optional[str] = Field(None, examples=["Ana Pérez"], max_length=120)
     email: Optional[str] = Field(None, examples=["ana@example.com"], max_length=254)
-    phone: Optional[str] = Field(None, examples=["04141234567"])
+    phone: Optional[str] = Field(None, examples=["04141873562"])
     """
     Venezuelan mobile; stored as 11 digits starting with 04.
     """
@@ -2931,7 +2945,7 @@ class CustomerListResponseDto(BaseModel):
 class UpdateCustomerDto(BaseModel):
     name: Optional[str] = Field(None, examples=["Ana Pérez"], max_length=120)
     email: Optional[str] = Field(None, examples=["ana@example.com"], max_length=254)
-    phone: Optional[str] = Field(None, examples=["04141234567"])
+    phone: Optional[str] = Field(None, examples=["04141873562"])
     """
     Venezuelan mobile; stored as 11 digits starting with 04.
     """

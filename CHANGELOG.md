@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.0
+
+- Checkout sessions: `CreateCheckoutSessionDto.successButtonLabel` sets the text of the button that takes the buyer to `successUrl` after paying (default «Continuar»; plain text, 1–40 characters, one line; requires `successUrl`). `CheckoutSessionResponseDto.successButtonLabel` reads it back (`None` when unset).
+
 ## 0.18.0
 
 - Checkout sessions: `CreateCheckoutSessionDto.amountVes` charges an exact bolívar amount (Pago Móvil, Débito Inmediato and card charge exactly that, whatever the rate). Send exactly one of `amountUsd` or `amountVes`; `amountUsd` is now optional. `CheckoutSessionResponseDto.amountVes` is the Bs amount (`null` for USD-priced sessions).

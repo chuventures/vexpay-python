@@ -40,7 +40,7 @@ vexpay = VexPay()
 payer = {
     "usdAmount": 25,
     "debtorId": "V12345678",
-    "debtorCellPhone": "584141234567",
+    "debtorCellPhone": "584141873562",
     "debtorBankCode": 102,
 }
 

@@ -1,6 +1,6 @@
 """Shared conformance: error-mapping, pagination, and retry fixtures from sdk-spec.
 
-Pass/fail must match the Node suite (``packages/sdk-node/test/conformance.test.ts``).
+Pass/fail must match the Node suite (``packages/vexpay/sdk-node/test/conformance.test.ts``).
 """
 
 from __future__ import annotations

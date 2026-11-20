@@ -22,4 +22,4 @@ uvx --from datamodel-code-generator==0.40.0 datamodel-codegen \
   --type-mappings "string+uuid=string" \
   --strict-nullable \
   --disable-timestamp \
-  --custom-file-header "# Generated from packages/sdk-spec/openapi.json by scripts/generate-models.sh — do not edit."
+  --custom-file-header "# Generated from packages/vexpay/sdk-spec/openapi.json by scripts/generate-models.sh — do not edit."
