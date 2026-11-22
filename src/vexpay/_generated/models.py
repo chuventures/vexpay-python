@@ -2730,6 +2730,21 @@ class CreateCheckoutSessionDto(BaseModel):
     """
 
 
+class CheckoutSessionPaymentInProgressDto(BaseModel):
+    paidVesAmount: str = Field(..., examples=["1500.00"])
+    """
+    Bolívars received so far.
+    """
+    missingVesAmount: str = Field(..., examples=["337.53"])
+    """
+    Bolívars still missing.
+    """
+    expiresAt: str
+    """
+    When the payment ends if the rest does not arrive (ISO 8601).
+    """
+
+
 class CheckoutSessionResponseDto(BaseModel):
     id: str = Field(..., examples=["cs_4f0c6f1e2b7d4c1a9e3f5a6b7c8d9e0f"])
     object: Literal["checkout.session"]
@@ -2778,6 +2793,10 @@ class CheckoutSessionResponseDto(BaseModel):
     livemode: bool
     """
     false for test-mode tenants.
+    """
+    paymentInProgress: Optional[CheckoutSessionPaymentInProgressDto] = None
+    """
+    Set while the buyer has paid part of the total by Pago Móvil and the rest is missing. The session stays `open` past `expiresAt` until that payment completes or ends (at least 24 hours after the first transfer): keep the order open meanwhile.
     """
 
 

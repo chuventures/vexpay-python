@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.0
+
+- Checkout sessions: `CheckoutSessionResponseDto.payment_in_progress` / `paymentInProgress` (`paidVesAmount`, `missingVesAmount`, `expiresAt`) is set while the buyer has paid part of the total by Pago Móvil. Buyers can now pay one checkout in several Pago Móviles; the session stays `open` past `expiresAt` (at least 24 hours after the first transfer) until that payment completes or ends, so keep the order open meanwhile. The `payment.completed` webhook for such a payment lists every transfer in `transfers` (`reference`, `vesAmount`, `at`).
+
 ## 0.23.0
 
 - Merchants: `CreateMerchantDto` / `UpdateMerchantDto` add `displayName` (the name buyers see on the hosted checkout, 1–60 characters on one line; `None` = show `name`) and `logoUrl` (a public https PNG, JPEG or WebP up to 2 MB; VEX Pay downloads it once and stores its own copy; `None` removes it). `MerchantResponseDto.logoUrl` reads VEX Pay's copy back.
