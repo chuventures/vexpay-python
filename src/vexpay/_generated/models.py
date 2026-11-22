@@ -1765,7 +1765,7 @@ class C2pRequestDto(BaseModel):
     """
     debtorBankCode: float = Field(..., examples=[102])
     """
-    Venezuelan bank institution code (e.g. 102, 105, 134). Must match a bank from GET /v1/banks.
+    Venezuelan bank institution code (e.g. 102, 105, 134). Must match a bank from GET /v1/banks; its `code` string ("0102") is accepted too.
     """
     externalRef: Optional[str] = Field(None, examples=["order-1042"], max_length=64)
     """
@@ -1956,7 +1956,7 @@ class C2pPaymentDto(BaseModel):
     debtorCellPhone: str = Field(..., examples=["584121873562"])
     debtorBankCode: float = Field(..., examples=[102])
     """
-    Venezuelan bank institution code (e.g. 102, 105, 134). Must match a bank from GET /v1/banks.
+    Venezuelan bank institution code (e.g. 102, 105, 134). Must match a bank from GET /v1/banks; its `code` string ("0102") is accepted too.
     """
     token: str = Field(..., examples=["123456"], pattern="^\\d{6,8}$")
     """
@@ -2406,6 +2406,12 @@ class CreateMerchantDto(BaseModel):
     autoPayoutEnabled: Optional[bool] = None
     """
     Pay this merchant's available balance automatically every 15 minutes. Omit it to use your account's `merchantAutoPayoutDefault` (GET /v1/marketplace/settings). Used only when the merchant is created; change it later with PATCH /v1/merchants/{id}.
+    """
+    applicationFeePercent: Optional[float] = Field(
+        None, examples=[12.5], ge=0.0, le=100.0
+    )
+    """
+    Negotiated marketplace commission (percent of vesAmount) retained from payments tagged with this merchant when the request sends no applicationFeeVes / applicationFeePercent. Omit it (or send null) to use the tenant's default commission. Used only when the merchant is created; change it later with PATCH /v1/merchants/{id}.
     """
 
 

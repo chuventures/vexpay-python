@@ -78,7 +78,7 @@ if current.status == "paid":
     print("ship order 1042")
 ```
 
-The hosted page lets the buyer pick the currency — bolívares, stablecoins or Colombian pesos — and offers every method your account accepts. Limit it with `methods` (`c2p`, `vpos`, `usdt`, `usdc`, `cop`).
+The hosted page lets the buyer pick the currency — bolívares, stablecoins or Colombian pesos — and offers every method your account accepts. Limit it with `methods` (`c2p`, `pago_movil`, `vpos`, `usdt`, `usdc`, `cop`).
 
 ## USDT
 
@@ -227,7 +227,7 @@ def handle_webhook(raw_body: bytes, signature: Optional[str]) -> int:
     return 204
 ```
 
-Deliveries older than 5 minutes are rejected as possible replays; pass `tolerance=` (seconds) to change that. Each delivery also carries a `VexPay-Event-Id` header you can use to deduplicate. In your own tests, sign fixtures with `Webhook.generate_test_header(payload, secret)`.
+Deliveries older than 5 minutes are rejected as possible replays; pass `tolerance=` (seconds) to change that. The `VexPay-Event-Id` header identifies one delivery (one per endpoint, each time an event is sent), so the same event can reach you more than once under different ids. Make your handler idempotent on the payment id and status (or the object id and event) rather than on that header. Deliveries are not retried automatically: answer 2xx quickly and reconcile missed events with the API. In your own tests, sign fixtures with `Webhook.generate_test_header(payload, secret)`.
 
 ## Errors
 
@@ -309,7 +309,7 @@ print(csv.splitlines()[0] if csv else "")
 
 ## Pagination
 
-`list()` on payouts, merchants, and products returns the first page; iterate it to walk every item across pages:
+`list()` on payouts, merchants, products, customers, prices, subscriptions, invoices and conversions (plus `balance.transactions.list()` and `merchants.list_transactions()`) returns the first page; iterate it to walk every item across pages:
 
 ```python
 from vexpay import VexPay
@@ -376,10 +376,10 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `balance` | `retrieve` |
 | `balance.transactions` | `list` (auto-paginating; every movement in your VES balance — reconcile with `ledgerNetVes`) |
 | `balance.topups` | `create`, `list`, `retrieve`, `instant`, `simulate` (load your own Bs balance by Pago Móvil; enabled per account) |
-| `payments` | `retrieve`, `retrieve_by_ref`, `reverse` |
+| `payments` | `retrieve`, `retrieve_by_ref`, `reverse`, `methods` |
 | `payments.c2p` | `request`, `execute` |
 | `payments.vpos` | `create` |
-| `payments.pago_movil` | `verify` |
+| `payments.pago_movil` | `receiving_account`, `verify` |
 | `payments.debit` · `credit` · `operations` · `dispersals` · `change` | débito/crédito inmediato and disbursements (advanced payments) |
 | `checkout.sessions` | `create`, `retrieve` |
 | `crypto` | `simulate_deposit` (Test mode only) |
@@ -396,6 +396,7 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `cop.balance` | `retrieve` |
 | `merchants` | `create`, `list`, `retrieve`, `retrieve_by_ref`, `update`, `delete`, `retrieve_balance`, `transfer`, `list_transactions`, `retrieve_statement`, `retrieve_statement_csv`, `list_audit_events`, `start_verification`, `confirm_verification` |
 | `merchants.payout_methods` | `list`, `create`, `set_default`, `delete`, `start_verification`, `confirm_verification` |
+| `merchants.marketplace_settings` | `retrieve`, `update` |
 | `payouts` | `create`, `create_instant`, `create_batch`, `list`, `retrieve`, `retrieve_by_ref` |
 | `products` | `create`, `list`, `retrieve`, `update`, `delete`, `create_link`, `list_links` |
 | `payment_links` | `retrieve`, `update`, `delete` |
@@ -408,6 +409,7 @@ Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies
 | `invoices` | `list`, `retrieve`, `void`, `mark_uncollectible`, `pay` |
 | `setup_sessions` | `create`, `retrieve` |
 | `payment_methods` | `retrieve`, `detach` (domiciliación; `payments.methods()` lists bolívar pay-in methods) |
+| `test_clocks` | `create`, `list`, `retrieve`, `delete`, `advance` (Test mode) |
 | `Webhook` / `client.webhooks` | `construct_event`, `generate_test_header` (offline) |
 
 ## License

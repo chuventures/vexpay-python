@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.0
+
+- `CreateMerchantDto` takes `applicationFeePercent` (the merchant's commission, set on create). Product `imageUrl` and payment-link `redirectUrl` are nullable: `null` or `""` clears them. C2P `debtorBankCode` documents that the GET /v1/banks code string ("0102") is accepted too.
+
 ## 0.19.0
 
 - Checkout sessions: `CreateCheckoutSessionDto.successButtonLabel` sets the text of the button that takes the buyer to `successUrl` after paying (default «Continuar»; plain text, 1–40 characters, one line; requires `successUrl`). `CheckoutSessionResponseDto.successButtonLabel` reads it back (`None` when unset).
