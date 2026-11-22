@@ -124,11 +124,41 @@ def test_maps_error_responses(
 
 
 def test_rate_limit_surfaces_after_retries(server: MockServer) -> None:
-    server.script([Scripted(429, {"message": "slow down"})])
+    server.script([Scripted(429, {"error": "rate_limited", "message": "slow down", "retryAfterSeconds": 1})])
     http, _ = sync_http(server, retries=1)
-    with pytest.raises(RateLimitError):
+    with pytest.raises(RateLimitError) as info:
+        http.request("GET", "/v1/banks")
+    assert info.value.is_rate_limit is True
+    assert len(server.requests) == 2
+
+
+def test_risk_429_is_not_retried(server: MockServer) -> None:
+    server.script(
+        [Scripted(429, {"statusCode": 429, "code": "CARD_VELOCITY_BLOCKED", "message": "Declined."}, {"retry-after": "5"})]
+    )
+    http, sleeps = sync_http(server)
+    with pytest.raises(RateLimitError) as info:
+        http.request("POST", "/v1/payments/vpos", body={})
+    assert info.value.is_rate_limit is False
+    assert len(server.requests) == 1
+    assert sleeps == []
+
+
+def test_ratelimit_header_alone_is_retried_and_exposed(server: MockServer) -> None:
+    headers = {"ratelimit": '"read";r=0;t=1', "ratelimit-policy": '"read";q=100;w=2', "retry-after": "1"}
+    server.script([Scripted(429, None, headers)])
+    http, sleeps = sync_http(server, retries=1)
+    with pytest.raises(RateLimitError) as info:
         http.request("GET", "/v1/banks")
     assert len(server.requests) == 2
+    assert sleeps == [1.0]
+    err = info.value
+    assert (err.is_rate_limit, err.retry_after_seconds, err.rate_limit, err.rate_limit_policy) == (
+        True,
+        1.0,
+        '"read";r=0;t=1',
+        '"read";q=100;w=2',
+    )
 
 
 def test_5xx_surfaces_as_api_error_after_retries(server: MockServer) -> None:
@@ -202,7 +232,7 @@ def test_does_not_retry_other_conflicts(server: MockServer) -> None:
 
 
 def test_honours_retry_after(server: MockServer) -> None:
-    server.script([Scripted(429, None, {"retry-after": "3"}), Scripted(200, {})])
+    server.script([Scripted(429, {"error": "rate_limited", "message": "slow down"}, {"retry-after": "3"}), Scripted(200, {})])
     http, sleeps = sync_http(server)
     http.request("GET", "/v1/banks")
     assert sleeps == [3.0]
@@ -287,3 +317,51 @@ async def test_async_client_context_manager(server: MockServer) -> None:
     server.script([Scripted(200, [])])
     async with AsyncVexPay("sk_test_async", base_url=server.url) as client:
         assert await client._http.request("GET", "/v1/banks") == []
+
+
+# ── client identification (VexPay-Client) ──────────────────────────────────────
+
+
+def test_sends_vexpay_client_header_without_app(server: MockServer) -> None:
+    import json
+    import platform
+
+    server.script([Scripted(200, [])])
+    http, _ = sync_http(server)
+    http.request("GET", "/v1/banks")
+    header = json.loads(server.requests[0].headers["vexpay-client"])
+    assert header == {
+        "sdk": "vexpay-python",
+        "sdkVersion": vexpay.__version__,
+        "runtime": "python",
+        "runtimeVersion": platform.python_version(),
+    }
+
+
+def test_app_info_goes_in_header_and_user_agent(server: MockServer) -> None:
+    import json
+
+    server.script([Scripted(200, [])])
+    with VexPay("sk_test_123", base_url=server.url, app_info={"name": "acme-bot", "version": "1.0.0"}) as client:
+        client._http.request("GET", "/v1/banks")
+    req = server.requests[0]
+    assert json.loads(req.headers["vexpay-client"])["app"] == {"name": "acme-bot", "version": "1.0.0"}
+    assert req.headers["user-agent"].endswith(" acme-bot/1.0.0")
+
+
+async def test_async_client_sends_app_info(server: MockServer) -> None:
+    import json
+
+    server.script([Scripted(200, [])])
+    async with AsyncVexPay("sk_test_async", base_url=server.url, app_info={"name": "acme-bot"}) as client:
+        await client._http.request("GET", "/v1/banks")
+    header = json.loads(server.requests[0].headers["vexpay-client"])
+    assert header["sdk"] == "vexpay-python"
+    assert header["app"] == {"name": "acme-bot"}
+
+
+def test_rejects_invalid_app_info() -> None:
+    with pytest.raises(ConfigurationError, match=r'app_info\["name"\]'):
+        VexPay("sk_test_123", app_info={"name": "My Store!"})
+    with pytest.raises(ConfigurationError, match=r'app_info\["version"\]'):
+        AsyncVexPay("sk_test_123", app_info={"name": "ok", "version": "not valid"})

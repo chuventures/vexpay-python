@@ -195,7 +195,7 @@ available = vexpay.cop.balance.retrieve().availableCop
 | Channel | What to use | Result |
 |---|---|---|
 | Bre-B | No buyer data | QR and key from the sandbox. **Never send real money to them** — sandbox keys are reachable from real banks and the money is not credited. |
-| Nequi | Phone `3991111111`, any valid document and email | Completes on its own within about a minute; `3992222222` is declined |
+| Nequi | Any valid phone (e.g. `3001234567`), document and email | Completes on its own within about a minute. No number is declined in the sandbox: to test a failure, cancel the payment or let it expire |
 | Daviplata | Same buyer data (`CC`, `CE` or `TI` only) | With `submit_otp`, OTP `123456`, `000000` or `111111` completes it; any other code fails with `invalid_otp` |
 
 ## Testing card payments
@@ -263,14 +263,16 @@ except VexPayError as error:
 | `InvalidRequestError` | 400, 403, 410, 422 — fix the request |
 | `NotFoundError` | 404 |
 | `ConflictError` | 409 — e.g. `external_ref_conflict`, `external_ref_already_paid` (body `paymentId`), `idempotency_key_reused` |
-| `RateLimitError` | 429, after retries |
+| `RateLimitError` | 429: a rate limit after retries (`is_rate_limit`), or a risk decline, not retried |
 | `APIError` | 5xx, after retries |
 | `APIConnectionError` / `APITimeoutError` | no HTTP answer, after retries |
 | `SignatureVerificationError` | a webhook did not verify |
 
 ## Retries and idempotency
 
-The SDK retries connection errors, timeouts, `429`, `5xx`, and `409 idempotency_request_in_progress` up to `max_network_retries` times (default 2) with exponential backoff, honouring `Retry-After`. Every `POST` gets a random `Idempotency-Key` that stays the same across its retries. Supply your own to make retries safe across process restarts too:
+The SDK retries connection errors, timeouts, rate-limit `429`s, `5xx`, and `409 idempotency_request_in_progress` up to `max_network_retries` times (default 2) with exponential backoff, waiting `Retry-After` when the API sends it. A `429` is retried only when it comes from VEX Pay's rate limiter: the body has `error` = `rate_limited` or the response has a `RateLimit` header. Any other `429` is a risk decline (`CARD_VELOCITY_BLOCKED`, `PAYER_BLOCKED`) and is raised at once: retrying it does not help. Responses carry `RateLimit-Policy` (for example `"write";q=50;w=2`: 50 requests in a burst, refilled in 2 seconds) and `RateLimit` (`"write";r=49;t=1`: 49 left, full again in 1 second). See [Rate limits](https://docs.vexpay.app/rate-limits) for the limits per tier. On the error you get after the last retry, `RateLimitError` has `is_rate_limit`, `retry_after_seconds`, `rate_limit` and `rate_limit_policy`.
+
+Every `POST` gets a random `Idempotency-Key` that stays the same across its retries. A rate-limited request did nothing, so retrying it with the same key is safe. Supply your own to make retries safe across process restarts too:
 
 ```python
 from vexpay import VexPay
@@ -283,6 +285,41 @@ session = vexpay.checkout.sessions.create(
     idempotency_key="order-1043-session",
 )
 print(quote.vesAmount, session.id)
+```
+
+## Merchant checkout color
+
+A marketplace merchant's payment links can carry the merchant's own brand color on the hosted checkout. Send `brandColor` (`#RRGGBB`) when you create or update the merchant; `None` falls back to your account's color (set in the portal). VEX Pay derives an accessible light and dark palette from it, so text always stays readable. Lowercase is accepted and stored uppercase. Anything other than `#` plus 6 hex digits, including an empty string, is refused with a 400 (`brandColor must be a 6-digit hex color, e.g. #0A7A5C`): to clear the color send `None`, and omit the field to leave it unchanged. Guide: [Checkout branding](https://docs.vexpay.app/checkout-branding).
+
+```python
+from vexpay import VexPay
+
+vexpay = VexPay()  # reads VEXPAY_API_KEY from the environment
+merchant_id = "00000000-0000-4000-8000-000000000000"
+
+vexpay.merchants.update(merchant_id, {"brandColor": "#0A7A5C"})
+
+# Back to your account's color
+vexpay.merchants.update(merchant_id, {"brandColor": None})
+```
+
+## Merchant name and logo on the checkout
+
+The hosted checkout shows the merchant a payment is tagged with. Send `displayName` (1–60 characters, one line) to change the name buyers see; `name` stays the name you registered. Send `logoUrl` (a public https PNG, JPEG or WebP, up to 2 MB): VEX Pay downloads it once, stores its own square copy and returns that copy as `logoUrl`. `None` clears either one; omit a field to leave it unchanged. A URL that can't be downloaded or isn't an image is refused with a 400 and nothing changes. Guide: [Checkout branding](https://docs.vexpay.app/checkout-branding).
+
+```python
+from vexpay import VexPay
+
+vexpay = VexPay()  # reads VEXPAY_API_KEY from the environment
+merchant_id = "00000000-0000-4000-8000-000000000000"
+
+vexpay.merchants.update(merchant_id, {
+    "displayName": "Pizzería Don Luis",
+    "logoUrl": "https://cdn.example.com/comercios/42.png",
+})
+
+# Back to the registered name, no logo
+vexpay.merchants.update(merchant_id, {"displayName": None, "logoUrl": None})
 ```
 
 ## Seller balances
@@ -366,6 +403,16 @@ with VexPay(
 ```
 
 Pass `http_client=httpx.Client(...)` (or `httpx.AsyncClient`) to control proxies, connection pooling, or instrumentation.
+
+### Building a plugin or platform on the SDK
+
+Pass `app_info` with your integration's name and version. The SDK sends it, with its own version and your Python version, in the `VexPay-Client` header and at the end of the `User-Agent`, so VEX Pay can see which integrations are in use. It is never used for authentication or pricing.
+
+```python
+from vexpay import VexPay
+
+vexpay = VexPay(app_info={"name": "acme-store", "version": "2.1.0"})  # lowercase letters, digits, . _ -
+```
 
 ## Resources
 

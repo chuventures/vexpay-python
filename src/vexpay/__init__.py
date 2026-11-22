@@ -1,7 +1,7 @@
 """Official Python SDK for the VEX Pay API."""
 
 from ._client import AsyncVexPay, VexPay
-from ._core import DEFAULT_BASE_URL, RequestOptions
+from ._core import DEFAULT_BASE_URL, AppInfo, RequestOptions
 from ._pagination import AsyncPage, SyncPage
 from ._errors import (
     APIConnectionError,
@@ -29,6 +29,7 @@ from ._webhooks import (
 )
 
 __all__ = [
+    "AppInfo",
     "DEFAULT_TOLERANCE",
     "GenericEvent",
     "PaymentEvent",

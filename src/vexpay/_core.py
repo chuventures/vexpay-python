@@ -6,12 +6,13 @@ import asyncio
 import json
 import platform
 import random
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 from urllib.parse import quote
 
 import httpx
@@ -23,6 +24,7 @@ from ._errors import (
     APITimeoutError,
     ConfigurationError,
     InvalidRequestError,
+    RateLimitError,
     VexPayError,
     error_from_response,
 )
@@ -51,8 +53,53 @@ class RequestOptions(TypedDict, total=False):
     max_network_retries: int
 
 
-def user_agent() -> str:
-    return f"vexpay-python/{__version__} python/{platform.python_version()}"
+_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
+_VERSION_RE = re.compile(r"^[0-9A-Za-z.+-]{1,32}$")
+
+
+class AppInfo(TypedDict, total=False):
+    """Identifies an integration built on the SDK (``VexPay-Client`` header and User-Agent)."""
+
+    #: Lowercase letters, digits, ``.``, ``_``, ``-``; up to 40 characters.
+    name: str
+    #: Up to 32 characters of ``0-9 A-Z a-z . + -``.
+    version: str
+
+
+def validate_app_info(app_info: Optional[Mapping[str, Any]]) -> Optional[Dict[str, str]]:
+    if app_info is None:
+        return None
+    name = app_info.get("name") if isinstance(app_info, Mapping) else None
+    if not isinstance(name, str) or not _NAME_RE.match(name):
+        raise ConfigurationError(
+            'app_info["name"] must be 1-40 lowercase letters, digits, ".", "_" or "-", '
+            "starting with a letter or digit."
+        )
+    version = app_info.get("version")
+    if version is not None and (not isinstance(version, str) or not _VERSION_RE.match(version)):
+        raise ConfigurationError(
+            'app_info["version"] must be 1-32 characters of 0-9, A-Z, a-z, ".", "+" or "-".'
+        )
+    return {"name": name} if version is None else {"name": name, "version": version}
+
+
+def user_agent(app_info: Optional[Mapping[str, str]] = None) -> str:
+    ua = f"vexpay-python/{__version__} python/{platform.python_version()}"
+    if app_info:
+        ua += f" {app_info['name']}" + (f"/{app_info['version']}" if app_info.get("version") else "")
+    return ua
+
+
+def client_header(app_info: Optional[Mapping[str, str]] = None) -> str:
+    """The ``VexPay-Client`` header: analytics only, never used for auth."""
+    payload: Dict[str, Any] = {"sdk": "vexpay-python", "sdkVersion": __version__}
+    runtime_version = platform.python_version()
+    if _VERSION_RE.match(runtime_version):
+        payload["runtime"] = "python"
+        payload["runtimeVersion"] = runtime_version
+    if app_info:
+        payload["app"] = dict(app_info)
+    return json.dumps(payload, separators=(",", ":"))
 
 
 def parse_retry_after(value: Optional[str], now: Optional[float] = None) -> Optional[float]:
@@ -83,7 +130,8 @@ def is_retryable(error: VexPayError) -> bool:
     if isinstance(error, APIConnectionError):
         return True
     if error.status == 429:
-        return True
+        # Only VEX Pay's rate limiter: other 429s are risk declines (CARD_VELOCITY_BLOCKED…).
+        return isinstance(error, RateLimitError) and error.is_rate_limit
     if error.status is not None and error.status >= 500:
         return True
     return error.status == 409 and error.code == "idempotency_request_in_progress"
@@ -146,6 +194,7 @@ class _Config:
         base_url: Optional[str],
         timeout: Optional[float],
         max_network_retries: Optional[int],
+        app_info: Optional[Mapping[str, Any]] = None,
     ) -> None:
         if not isinstance(api_key, str) or not api_key.strip():
             raise ConfigurationError(
@@ -157,6 +206,9 @@ class _Config:
         self.max_network_retries = (
             DEFAULT_MAX_NETWORK_RETRIES if max_network_retries is None else max_network_retries
         )
+        self.app_info = validate_app_info(app_info)
+        self.user_agent = user_agent(self.app_info)
+        self.client_header = client_header(self.app_info)
 
     def prepare(
         self,
@@ -170,7 +222,8 @@ class _Config:
         headers = {
             "accept": "application/json",
             "x-api-key": self.api_key,
-            "user-agent": user_agent(),
+            "user-agent": self.user_agent,
+            "vexpay-client": self.client_header,
         }
         content = serialize_body(body)
         if content is not None:
@@ -190,7 +243,7 @@ def _result(response: httpx.Response) -> tuple[Any, Optional[VexPayError], Optio
     body = _parse_content(response.content)
     if response.is_success:
         return body, None, None
-    error = error_from_response(response.status_code, body, response.headers.get("x-request-id"))
+    error = error_from_response(response.status_code, body, response.headers.get("x-request-id"), response.headers)
     return None, error, parse_retry_after(response.headers.get("retry-after"))
 
 

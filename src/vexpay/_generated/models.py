@@ -22,7 +22,11 @@ class ApiErrorDto(BaseModel):
     """
     error: Optional[str] = Field(None, examples=["insufficient_balance"])
     """
-    Machine-readable error code (e.g. `external_ref_conflict`, `insufficient_balance`, `idempotency_key_reused`, `live_mode_not_activated`) or, for Nest default errors, a short label such as `Bad Request`. Domain errors may include extra route-specific fields.
+    Machine-readable error code (e.g. `external_ref_conflict`, `insufficient_balance`, `idempotency_key_reused`, `live_mode_not_activated`, `rate_limited`) or, for Nest default errors, a short label such as `Bad Request`. Domain errors may include extra route-specific fields.
+    """
+    retryAfterSeconds: Optional[float] = Field(None, examples=[2])
+    """
+    Only on a 429 `rate_limited`: whole seconds to wait before retrying (same value as the `Retry-After` header).
     """
 
 
@@ -2273,6 +2277,17 @@ class MerchantResponseDto(BaseModel):
     """
     merchantType: Optional[Literal["INDIVIDUAL", "COMPANY"]] = None
     displayName: Optional[str] = None
+    """
+    Name shown to buyers on the hosted checkout; null = `name`.
+    """
+    logoUrl: Optional[str] = None
+    """
+    URL of VEX Pay's stored copy of the merchant logo (square PNG); null = no logo.
+    """
+    brandColor: Optional[str] = Field(None, examples=["#0A7A5C"])
+    """
+    Hosted-checkout brand color for this merchant's links (`#RRGGBB`); null = your account's.
+    """
     walletUserId: Optional[str] = None
     """
     VEX Wallet user id (`ownerType = "wallet"`).
@@ -2412,6 +2427,24 @@ class CreateMerchantDto(BaseModel):
     )
     """
     Negotiated marketplace commission (percent of vesAmount) retained from payments tagged with this merchant when the request sends no applicationFeeVes / applicationFeePercent. Omit it (or send null) to use the tenant's default commission. Used only when the merchant is created; change it later with PATCH /v1/merchants/{id}.
+    """
+    brandColor: Optional[str] = Field(
+        None, examples=["#0A7A5C"], pattern="^#[0-9A-Fa-f]{6}$"
+    )
+    """
+    Hosted-checkout brand color for this merchant's links, as `#RRGGBB` (stored uppercase). The checkout derives an accessible palette from it for light and dark mode. Omit or send null to use your account's brand color.
+    """
+    displayName: Optional[str] = Field(
+        None, examples=["Pizzería Don Luis"], max_length=60
+    )
+    """
+    Name buyers see on the hosted checkout for this merchant, 1–60 characters on one line. Omit it (or send null) to show `name`. Change it later with PATCH /v1/merchants/{id}.
+    """
+    logoUrl: Optional[AnyUrl] = Field(
+        None, examples=["https://cdn.example.com/comercios/42.png"]
+    )
+    """
+    Public https URL of the merchant's logo (PNG, JPEG or WebP, up to 2 MB). VEX Pay downloads it once, stores its own square PNG copy and returns that copy's URL as `logoUrl`; the hosted checkout shows it in the seller header. An unreachable URL or a file that is not an image answers 400 and nothing is created.
     """
 
 
@@ -2591,6 +2624,24 @@ class UpdateMerchantDto(BaseModel):
     )
     """
     Negotiated marketplace commission (percent of vesAmount) retained from payments tagged with this merchant when the request sends no applicationFeeVes / applicationFeePercent. null clears the override so the tenant's default commission applies.
+    """
+    brandColor: Optional[str] = Field(
+        None, examples=["#0A7A5C"], pattern="^#[0-9A-Fa-f]{6}$"
+    )
+    """
+    Hosted-checkout brand color for this merchant's links, as `#RRGGBB` (stored uppercase). The checkout derives an accessible palette from it for light and dark mode. Omit or send null to use your account's brand color. null clears it.
+    """
+    displayName: Optional[str] = Field(
+        None, examples=["Pizzería Don Luis"], max_length=60
+    )
+    """
+    Name buyers see on the hosted checkout, 1–60 characters on one line. null clears it so `name` shows again. `name` itself is the name given at creation and cannot be changed.
+    """
+    logoUrl: Optional[AnyUrl] = Field(
+        None, examples=["https://cdn.example.com/comercios/42.png"]
+    )
+    """
+    Public https URL of the merchant's logo (PNG, JPEG or WebP, up to 2 MB). VEX Pay downloads it once and stores its own square PNG copy (returned as `logoUrl`). null removes the logo. An unreachable URL or a file that is not an image answers 400 and the current logo is kept.
     """
 
 

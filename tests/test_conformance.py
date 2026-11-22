@@ -15,6 +15,7 @@ import pytest
 from vexpay import (
     APIError,
     AuthenticationError,
+    ConfigurationError,
     ConflictError,
     InvalidRequestError,
     NotFoundError,
@@ -164,3 +165,27 @@ def test_retries_fixture(server: MockServer, case: dict[str, Any]) -> None:
         assert keys[0] == expect["idempotencyKey"]
     if "retryAfterSeconds" in expect:
         assert sleeps == [float(expect["retryAfterSeconds"])]
+
+
+# ── client identification ──────────────────────────────────────────────────────
+
+_IDENT = _load("client-identification.json")
+
+
+@pytest.mark.parametrize("app_info", _IDENT["validAppInfo"])
+def test_client_identification_valid_app_info(server: MockServer, app_info: dict[str, Any]) -> None:
+    server.script([Scripted(200, [])])
+    with VexPay("sk_test", base_url=server.url, app_info=app_info) as client:
+        client._http.request("GET", "/v1/banks")
+    raw = server.requests[0].headers["vexpay-client"]
+    header = json.loads(raw)
+    assert len(raw.encode()) <= _IDENT["maxBytes"]
+    assert header["sdk"] == _IDENT["sdkNames"]["python"]
+    assert header["runtime"] == _IDENT["runtimeNames"]["python"]
+    assert header["app"] == app_info
+
+
+@pytest.mark.parametrize("app_info", _IDENT["invalidAppInfo"])
+def test_client_identification_invalid_app_info(app_info: dict[str, Any]) -> None:
+    with pytest.raises(ConfigurationError):
+        VexPay("sk_test", app_info=app_info)

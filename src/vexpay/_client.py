@@ -8,7 +8,7 @@ import httpx
 
 from . import _async_resources as ar
 from . import _resources as r
-from ._core import AsyncHttp, SyncHttp, _Config
+from ._core import AppInfo, AsyncHttp, SyncHttp, _Config
 from ._webhooks import Webhook
 
 
@@ -27,12 +27,14 @@ class VexPay:
         timeout: Optional[float] = None,
         max_network_retries: Optional[int] = None,
         http_client: Optional[httpx.Client] = None,
+        app_info: Optional[AppInfo] = None,
     ) -> None:
         config = _Config(
             api_key if api_key is not None else os.environ.get("VEXPAY_API_KEY"),
             base_url,
             timeout,
             max_network_retries,
+            app_info,
         )
         self._http = SyncHttp(config, http_client)
         self.banks = r.Banks(self._http)
@@ -88,12 +90,14 @@ class AsyncVexPay:
         timeout: Optional[float] = None,
         max_network_retries: Optional[int] = None,
         http_client: Optional[httpx.AsyncClient] = None,
+        app_info: Optional[AppInfo] = None,
     ) -> None:
         config = _Config(
             api_key if api_key is not None else os.environ.get("VEXPAY_API_KEY"),
             base_url,
             timeout,
             max_network_retries,
+            app_info,
         )
         self._http = AsyncHttp(config, http_client)
         self.banks = ar.AsyncBanks(self._http)

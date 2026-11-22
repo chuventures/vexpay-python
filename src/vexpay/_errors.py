@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 
 class VexPayError(Exception):
@@ -52,7 +52,32 @@ class ConflictError(VexPayError):
 
 
 class RateLimitError(VexPayError):
-    """429 — too many requests. Retried automatically before surfacing."""
+    """429.
+
+    When ``is_rate_limit`` is true (VEX Pay's rate limiter: body ``error`` = ``rate_limited`` or a
+    ``RateLimit`` header), it was retried after ``Retry-After`` before surfacing. Otherwise it is a
+    risk decline (e.g. ``CARD_VELOCITY_BLOCKED``) and was not retried.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        is_rate_limit: bool = False,
+        retry_after_seconds: Optional[float] = None,
+        rate_limit: Optional[str] = None,
+        rate_limit_policy: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, **kwargs)
+        #: True when the API's rate limiter refused the request.
+        self.is_rate_limit = is_rate_limit
+        #: Seconds to wait, from the ``Retry-After`` header, when present.
+        self.retry_after_seconds = retry_after_seconds
+        #: Raw ``RateLimit`` header, e.g. ``"write";r=0;t=2``.
+        self.rate_limit = rate_limit
+        #: Raw ``RateLimit-Policy`` header, e.g. ``"write";q=50;w=2``.
+        self.rate_limit_policy = rate_limit_policy
 
 
 class APIError(VexPayError):
@@ -89,7 +114,12 @@ def _message_from(body: Any, status: int) -> str:
     return f"VEX Pay API responded with HTTP {status}"
 
 
-def error_from_response(status: int, body: Any, request_id: Optional[str] = None) -> VexPayError:
+def error_from_response(
+    status: int,
+    body: Any,
+    request_id: Optional[str] = None,
+    headers: Optional[Mapping[str, str]] = None,
+) -> VexPayError:
     """Maps an HTTP error response to the matching error class."""
     raw_code = body.get("error") if isinstance(body, dict) else None
     code = raw_code if isinstance(raw_code, str) and _MACHINE_CODE.match(raw_code) else None
@@ -103,7 +133,21 @@ def error_from_response(status: int, body: Any, request_id: Optional[str] = None
     if status == 409:
         return ConflictError(message, **kwargs)
     if status == 429:
-        return RateLimitError(message, **kwargs)
+        rate_limit = headers.get("ratelimit") if headers is not None else None
+        retry_after: Optional[float] = None
+        try:
+            raw = headers.get("retry-after") if headers is not None else None
+            retry_after = float(raw) if raw is not None and float(raw) >= 0 else None
+        except ValueError:
+            retry_after = None
+        return RateLimitError(
+            message,
+            is_rate_limit=bool(rate_limit) or (isinstance(body, dict) and body.get("error") == "rate_limited"),
+            retry_after_seconds=retry_after,
+            rate_limit=rate_limit,
+            rate_limit_policy=headers.get("ratelimit-policy") if headers is not None else None,
+            **kwargs,
+        )
     if status >= 500:
         return APIError(message, **kwargs)
     return InvalidRequestError(message, **kwargs)
