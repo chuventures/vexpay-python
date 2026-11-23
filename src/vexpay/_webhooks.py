@@ -85,6 +85,17 @@ class CheckoutSessionRef(BaseModel):
     metadata: dict[str, str] = {}
 
 
+class PaymentWebhookTransfer(BaseModel):
+    """One Pago Móvil transfer counted toward a payment."""
+
+    model_config = ConfigDict(extra="allow")
+
+    reference: Optional[str] = None
+    vesAmount: Optional[float] = None
+    #: ISO 8601 time the transfer arrived.
+    at: Optional[str] = None
+
+
 class PaymentWebhookData(BaseModel):
     """``data`` of every ``payment.*`` event. Lenient on purpose: a verified delivery never fails to parse."""
 
@@ -121,6 +132,18 @@ class PaymentWebhookData(BaseModel):
     livemode: Optional[bool] = None
     #: Present when the payment came from a checkout session.
     checkoutSession: Optional[CheckoutSessionRef] = None
+    #: Pago Móvil paid in several transfers: each transfer counted so far, oldest first. On
+    #: payment.completed, on payment.pending (once per transfer that does not complete it yet) and on
+    #: an expired payment.failed that had money on it.
+    transfers: Optional[list[PaymentWebhookTransfer]] = None
+    #: payment.pending / expired payment.failed of a Pago Móvil paid in several transfers: bolívars received so far.
+    paidVesAmount: Optional[float] = None
+    #: payment.pending of a Pago Móvil paid in several transfers: bolívars still missing.
+    missingVesAmount: Optional[float] = None
+    #: payment.pending of a Pago Móvil paid in several transfers: when it expires if the rest does not arrive.
+    expiresAt: Optional[str] = None
+    #: Expired payment.failed that had money on it: True. VEX Pay support refunds what arrived to the buyer.
+    refundPending: Optional[bool] = None
 
 
 class PaymentEvent(BaseModel):

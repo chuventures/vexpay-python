@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.0
+
+- Webhooks: `PaymentWebhookData` gains `transfers` (`PaymentWebhookTransfer`: `reference`, `vesAmount`, `at`), `paidVesAmount`, `missingVesAmount`, `expiresAt` and `refundPending`. A Pago Móvil paid in several transfers now sends `payment.pending` for each transfer that does not complete it yet (same `paymentId` every time, so handle it idempotently). If the rest never arrives, the expired `payment.failed` carries `paidVesAmount`, `transfers` and `refundPending: True`: VEX Pay support refunds the buyer.
+
 ## 0.24.0
 
 - Checkout sessions: `CheckoutSessionResponseDto.payment_in_progress` / `paymentInProgress` (`paidVesAmount`, `missingVesAmount`, `expiresAt`) is set while the buyer has paid part of the total by Pago Móvil. Buyers can now pay one checkout in several Pago Móviles; the session stays `open` past `expiresAt` (at least 24 hours after the first transfer) until that payment completes or ends, so keep the order open meanwhile. The `payment.completed` webhook for such a payment lists every transfer in `transfers` (`reference`, `vesAmount`, `at`).

@@ -24,6 +24,7 @@ from ._webhooks import (
     GenericEvent,
     PaymentEvent,
     PaymentWebhookData,
+    PaymentWebhookTransfer,
     Webhook,
     WebhookEvent,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "GenericEvent",
     "PaymentEvent",
     "PaymentWebhookData",
+    "PaymentWebhookTransfer",
     "SIGNATURE_HEADER",
     "WEBHOOK_EVENT_NAMES",
     "Webhook",

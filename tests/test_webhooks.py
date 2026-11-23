@@ -92,3 +92,41 @@ def test_available_on_the_client() -> None:
 def test_event_names_match_api_fixture() -> None:
     events = json.loads((FIXTURES / "webhook-events.json").read_text())["events"]
     assert list(WEBHOOK_EVENT_NAMES) == events
+
+
+def _deliver(event: str, data: dict[str, Any]) -> Any:
+    payload = json.dumps({"event": event, "data": {"livemode": True, **data}, "timestamp": "t"})
+    header = Webhook.generate_test_header(payload, "whsec", timestamp=1_790_000_000)
+    return Webhook.construct_event(payload, header, "whsec", now=1_790_000_000)
+
+
+def test_partial_pago_movil_pending_carries_progress() -> None:
+    # pago-movil-partial-webhooks: one payment.pending per transfer that does not complete it yet.
+    event = _deliver(
+        "payment.pending",
+        {
+            "paymentId": "pay-1",
+            "status": "PENDING",
+            "method": "PAGO_MOVIL",
+            "vesAmount": 1837.53,
+            "paidVesAmount": 1500,
+            "missingVesAmount": 337.53,
+            "expiresAt": "2026-11-24T01:47:26.112Z",
+            "transfers": [{"reference": "063269956294", "vesAmount": 1500, "at": "2026-11-23T01:47:26.111Z"}],
+        },
+    )
+    assert isinstance(event, PaymentEvent)
+    assert event.data.paidVesAmount == 1500
+    assert event.data.missingVesAmount == 337.53
+    assert event.data.transfers is not None and event.data.transfers[0].reference == "063269956294"
+    assert event.data.refundPending is None
+
+
+def test_expired_partial_failed_says_refund_pending() -> None:
+    event = _deliver(
+        "payment.failed",
+        {"paymentId": "pay-1", "status": "FAILED", "failureCode": "expired", "paidVesAmount": 1500, "refundPending": True},
+    )
+    assert isinstance(event, PaymentEvent)
+    assert event.data.refundPending is True
+    assert event.data.paidVesAmount == 1500
