@@ -231,7 +231,7 @@ Deliveries older than 5 minutes are rejected as possible replays; pass `toleranc
 
 ## Errors
 
-Every error extends `VexPayError` and carries `status`, the API `code` (e.g. `insufficient_balance`), and the response `body`.
+Every error extends `VexPayError` and carries `status`, the API `code` (e.g. `insufficient_balance`), `doc_url` (the code's entry on https://docs.vexpay.app/errors) and the response `body`.
 
 ```python
 from vexpay import ConflictError, InvalidRequestError, NotFoundError, VexPay, VexPayError
@@ -423,7 +423,7 @@ vexpay = VexPay(app_info={"name": "acme-store", "version": "2.1.0"})  # lowercas
 | `balance` | `retrieve` |
 | `balance.transactions` | `list` (auto-paginating; every movement in your VES balance — reconcile with `ledgerNetVes`) |
 | `balance.topups` | `create`, `list`, `retrieve`, `instant`, `simulate` (load your own Bs balance by Pago Móvil; enabled per account) |
-| `payments` | `retrieve`, `retrieve_by_ref`, `reverse`, `methods` |
+| `payments` | `list`, `export`, `retrieve`, `retrieve_by_ref`, `reverse`, `methods` |
 | `payments.c2p` | `request`, `execute` |
 | `payments.vpos` | `create` |
 | `payments.pago_movil` | `receiving_account`, `verify` |
@@ -446,9 +446,9 @@ vexpay = VexPay(app_info={"name": "acme-store", "version": "2.1.0"})  # lowercas
 | `merchants.marketplace_settings` | `retrieve`, `update` |
 | `payouts` | `create`, `create_instant`, `create_batch`, `list`, `retrieve`, `retrieve_by_ref` |
 | `products` | `create`, `list`, `retrieve`, `update`, `delete`, `create_link`, `list_links` |
-| `payment_links` | `retrieve`, `update`, `delete` |
+| `payment_links` | `create`, `list`, `retrieve`, `cancel`, `update`, `delete` |
 | `tenant_payout_account` | `retrieve`, `upsert`, `create`, `start_verification`, `confirm_verification` |
-| `webhook_endpoints` | `create`, `list`, `update`, `delete`, `send_test` |
+| `webhook_endpoints` | `create`, `list`, `update`, `delete`, `send_test`, `list_deliveries`, `resend_delivery`, `rotate_secret` |
 | `customers` | `create`, `list`, `retrieve`, `update`, `delete` |
 | `customers.payment_methods` | `list` |
 | `prices` | `create`, `list`, `retrieve`, `update` |

@@ -28,6 +28,16 @@ class ApiErrorDto(BaseModel):
     """
     Only on a 429 `rate_limited`: whole seconds to wait before retrying (same value as the `Retry-After` header).
     """
+    code: str = Field(..., examples=["insufficient_balance"])
+    """
+    Stable machine-readable code, on every error. Branch on this field. Lowercase snake_case, except risk-decline and bank codes that already were uppercase (e.g. `CARD_VELOCITY_BLOCKED`, `BANK_REJECTED`), which keep their value. Each code is described at `docUrl`.
+    """
+    docUrl: str = Field(
+        ..., examples=["https://docs.vexpay.app/errors#insufficient_balance"]
+    )
+    """
+    The error catalog entry for `code`: what it means and what to do.
+    """
 
 
 class CreateWebhookDto(BaseModel):
@@ -160,6 +170,10 @@ class WebhookEndpointDto(BaseModel):
     """
     Returned only when the endpoint is created. Store it securely; list responses omit it.
     """
+    previousSecretExpiresAt: Optional[AwareDatetime] = None
+    """
+    After a secret rotation: until when the previous secret also signs deliveries.
+    """
 
 
 class UpdateWebhookDto(BaseModel):
@@ -234,6 +248,60 @@ class UpdateWebhookDto(BaseModel):
 
 class DeleteWebhookResponseDto(BaseModel):
     deleted: bool = Field(..., examples=[True])
+
+
+class WebhookDeliveryDto(BaseModel):
+    id: str
+    """
+    Delivery id. Also the `VexPay-Event-Id` header of every attempt.
+    """
+    event: str = Field(..., examples=["payment.completed"])
+    status: Literal["pending", "retrying", "success", "failed"]
+    attempts: float = Field(..., examples=[2])
+    """
+    Attempts sent so far (automatic and manual).
+    """
+    lastAttemptAt: Optional[AwareDatetime] = Field(...)
+    nextAttemptAt: Optional[AwareDatetime] = Field(...)
+    """
+    When the next automatic retry is due. Null when none is scheduled.
+    """
+    lastResponseStatus: Optional[float] = Field(..., examples=[503])
+    """
+    HTTP status your endpoint answered on the last attempt. Null on a network error or timeout.
+    """
+    lastResponseBody: Optional[str] = Field(...)
+    """
+    First 1000 characters of your endpoint’s last reply, or the network error.
+    """
+    createdAt: AwareDatetime
+
+
+class WebhookDeliveryListDto(BaseModel):
+    items: list[WebhookDeliveryDto]
+    nextCursor: Optional[str] = Field(...)
+    """
+    Pass as `cursor` for the next page. Null on the last page.
+    """
+
+
+class RotateWebhookSecretDto(BaseModel):
+    expiresInHours: float = Field(24, ge=0.0, le=168.0)
+    """
+    Hours the previous secret keeps signing (a second `v1=` entry) so you can switch without missing deliveries. 0 stops it at once (use after a leak).
+    """
+
+
+class RotateWebhookSecretResponseDto(BaseModel):
+    id: str
+    secret: str
+    """
+    The new signing secret. Shown only in this response; store it securely.
+    """
+    previousSecretExpiresAt: Optional[AwareDatetime] = Field(...)
+    """
+    Until when the previous secret also signs deliveries (a second `v1=` entry). Null when it stopped at once.
+    """
 
 
 class BsSettlementStatusDto(BaseModel):
@@ -2143,10 +2211,6 @@ class PaymentMethodsResponseDto(BaseModel):
 
 
 class PagoMovilReceivingAccountDto(BaseModel):
-    provider: Literal["r4", "bnc", "sofitasa"] = Field(..., examples=["r4"])
-    """
-    Provider Pago Móvil verify uses for this tenant (same routing as POST /v1/payments/pago-movil/verify).
-    """
     bankCode: str = Field(..., examples=["0169"])
     """
     Four-digit SIMF code of the receiving bank.
@@ -2203,6 +2267,14 @@ class PagoMovilVerifyDto(BaseModel):
     splits: Optional[list[SplitShareDto]] = Field(None, max_length=10, min_length=1)
     """
     Split this payment between up to 10 of your merchants (marketplace). Each merchant is credited its share minus its part of the VEX Pay fee and your commission when the bank confirms the payment; the rest stays with your account. Not with merchantId / applicationFeeVes / applicationFeePercent, and not with onwardPayout. See the "Marketplace: split one payment between comercios" guide.
+    """
+
+
+class PaymentListDto(BaseModel):
+    items: list[PaymentReceiptDto]
+    nextCursor: Optional[str] = Field(...)
+    """
+    Pass as `cursor` for the next page. Null on the last page.
     """
 
 
@@ -2802,6 +2874,10 @@ class CheckoutSessionResponseDto(BaseModel):
 
 class PaymentLinkResponseDto(BaseModel):
     id: str
+    kind: Literal["product"] = Field(..., examples=["product"])
+    """
+    Product links are reusable; one-shot links have kind `one_shot`.
+    """
     productId: str
     slug: str = Field(..., examples=["camiseta-vexpay"])
     hostedCheckoutPath: str = Field(..., examples=["/pay/camiseta-vexpay"])
@@ -2872,6 +2948,65 @@ class CreatePaymentLinkDto(BaseModel):
     """
     Where to send the buyer after a successful payment.
     """
+
+
+class OneShotPaymentLinkDto(BaseModel):
+    id: str = Field(..., examples=["plk_4f0c6f1e2b7d4c1a9e3f5a6b7c8d9e0f"])
+    kind: Literal["one_shot"]
+    origin: Literal["portal", "api"]
+    """
+    Where the link was created.
+    """
+    url: str = Field(
+        ..., examples=["https://pay.vexpay.app/pay/torta-de-chocolate-x7k2"]
+    )
+    """
+    Hosted checkout URL to share with the buyer.
+    """
+    slug: str
+    status: Literal["ACTIVE", "PAID", "EXPIRED", "CANCELLED"]
+    amount: str = Field(..., examples=["25.00"])
+    currency: Literal["USD"]
+    description: str
+    reference: Optional[str] = Field(...)
+    createdAt: AwareDatetime
+    expiresAt: Optional[AwareDatetime] = Field(...)
+    paidAt: Optional[AwareDatetime] = Field(...)
+    paymentId: Optional[str] = Field(...)
+    """
+    The completed payment, once paid.
+    """
+
+
+class CreateOneShotPaymentLinkDto(BaseModel):
+    amount: str = Field(..., examples=["25.00"])
+    """
+    USD, positive, up to 2 decimals. Fixed at creation; at least your minimum charge.
+    """
+    description: str = Field(
+        ..., examples=["Torta de chocolate"], max_length=140, min_length=1
+    )
+    """
+    Shown to the buyer on the hosted checkout.
+    """
+    reference: Optional[str] = Field(
+        None, examples=["order-1042"], max_length=64, min_length=1
+    )
+    """
+    Private to you; echoed on reads and in payment.* webhooks.
+    """
+    expiresAt: Optional[AwareDatetime] = None
+    """
+    Optional expiry, in the future. Without it the link stays open until paid or cancelled.
+    """
+
+
+class PaymentLinkListDto(BaseModel):
+    items: list[Union[OneShotPaymentLinkDto, PaymentLinkResponseDto]]
+    """
+    One-shot (`kind: one_shot`) and product (`kind: product`) links, newest first.
+    """
+    nextCursor: Optional[str] = Field(...)
 
 
 class UpdatePaymentLinkDto(BaseModel):

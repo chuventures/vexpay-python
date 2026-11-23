@@ -66,6 +66,7 @@ def test_error_mapping_fixture(server: MockServer, case: dict[str, Any]) -> None
         fixture["requestId"],
         case["message"],
     )
+    assert err.doc_url == case.get("docUrl")
     assert len(server.requests) == 1
     assert sleeps == []
 

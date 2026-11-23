@@ -15,13 +15,17 @@ class VexPayError(Exception):
         code: Optional[str] = None,
         body: Any = None,
         request_id: Optional[str] = None,
+        doc_url: Optional[str] = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         #: HTTP status, when the API answered.
         self.status = status
-        #: Machine-readable API code, e.g. ``insufficient_balance``.
+        #: Stable API code: the body's ``code`` (e.g. ``insufficient_balance``, ``validation_failed``, or an
+        #: uppercase risk or bank code such as ``CARD_VELOCITY_BLOCKED``), else a lowercase ``error``.
         self.code = code
+        #: Docs page for ``code``, e.g. ``https://docs.vexpay.app/errors#insufficient_balance``, when sent.
+        self.doc_url = doc_url
         #: Parsed response body, when the API answered.
         self.body = body
         #: Value of the ``x-request-id`` response header, when present.
@@ -96,7 +100,28 @@ class SignatureVerificationError(VexPayError):
     """A webhook signature did not verify (see ``Webhook.construct_event``)."""
 
 
+# Legacy ``error`` values that are codes (not HTTP reason phrases such as ``Bad Request``).
 _MACHINE_CODE = re.compile(r"^[a-z][a-z0-9_]*$")
+# ``code`` is stable: lowercase snake_case, or an uppercase risk or bank code (``PAYER_BLOCKED``, ``AM04``).
+_API_CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_]*$")
+
+
+def _code_from(body: Any) -> Optional[str]:
+    """The body's ``code`` first, then a machine-readable ``error`` (APIs before ``code`` existed)."""
+    if not isinstance(body, dict):
+        return None
+    code = body.get("code")
+    if isinstance(code, str) and _API_CODE.match(code):
+        return code
+    error = body.get("error")
+    if isinstance(error, str) and _MACHINE_CODE.match(error):
+        return error
+    return None
+
+
+def _doc_url_from(body: Any) -> Optional[str]:
+    doc_url = body.get("docUrl") if isinstance(body, dict) else None
+    return doc_url if isinstance(doc_url, str) and doc_url else None
 
 
 def _message_from(body: Any, status: int) -> str:
@@ -121,10 +146,15 @@ def error_from_response(
     headers: Optional[Mapping[str, str]] = None,
 ) -> VexPayError:
     """Maps an HTTP error response to the matching error class."""
-    raw_code = body.get("error") if isinstance(body, dict) else None
-    code = raw_code if isinstance(raw_code, str) and _MACHINE_CODE.match(raw_code) else None
+    code = _code_from(body)
     message = _message_from(body, status)
-    kwargs: dict[str, Any] = {"status": status, "code": code, "body": body, "request_id": request_id}
+    kwargs: dict[str, Any] = {
+        "status": status,
+        "code": code,
+        "body": body,
+        "request_id": request_id,
+        "doc_url": _doc_url_from(body),
+    }
 
     if status == 401:
         return AuthenticationError(message, **kwargs)
@@ -142,7 +172,9 @@ def error_from_response(
             retry_after = None
         return RateLimitError(
             message,
-            is_rate_limit=bool(rate_limit) or (isinstance(body, dict) and body.get("error") == "rate_limited"),
+            is_rate_limit=bool(rate_limit)
+            or code == "rate_limited"
+            or (isinstance(body, dict) and body.get("error") == "rate_limited"),
             retry_after_seconds=retry_after,
             rate_limit=rate_limit,
             rate_limit_policy=headers.get("ratelimit-policy") if headers is not None else None,

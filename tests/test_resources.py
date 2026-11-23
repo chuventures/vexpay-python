@@ -25,7 +25,7 @@ SNAPSHOT_OPERATIONS = {
     for op in item.values()
     if isinstance(op, dict) and "operationId" in op
 }
-PATH_ARG_NAMES = {"id", "merchant_id", "method_id", "external_ref", "customer_id"}
+PATH_ARG_NAMES = {"id", "merchant_id", "method_id", "external_ref", "customer_id", "delivery_id"}
 
 
 def resource_methods(root: object, prefix: str = "") -> list[tuple[str, Any]]:
@@ -163,7 +163,6 @@ def test_returns_validated_models(server: MockServer) -> None:
 
 
 RECEIVING_ACCOUNT = {
-    "provider": "r4",
     "bankCode": "0169",
     "bankName": "R4 Conecta",
     "phone": "04125555555",

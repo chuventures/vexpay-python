@@ -15,6 +15,15 @@ from ._resource import SyncAPIResource
 
 Params = Mapping[str, Any]
 
+#: ``payment_links.retrieve()`` answers either kind; check ``kind``.
+PaymentLink = Union[m.OneShotPaymentLinkDto, m.PaymentLinkResponseDto]
+
+
+def _payment_link(raw: Any) -> PaymentLink:
+    if isinstance(raw, dict) and raw.get("kind") == "one_shot":
+        return m.OneShotPaymentLinkDto.model_validate(raw)
+    return m.PaymentLinkResponseDto.model_validate(raw)
+
 
 # ── payments ──────────────────────────────────────────────────────────────────
 
@@ -151,6 +160,29 @@ class Payments(SyncAPIResource):
     def methods(self, **options: Unpack[RequestOptions]) -> m.PaymentMethodsResponseDto:
         """Bolívar methods your account can take now (``pago_movil``, ``c2p``, ``vpos``), with a reason when unavailable."""
         return self._request_model("Payments_listPaymentMethods", m.PaymentMethodsResponseDto, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.PaymentListDto, m.PaymentReceiptDto]:
+        """Your Bolívar sale payments, newest first (top-ups and partial transfers are not listed).
+
+        Filters: ``status`` and ``method`` (comma lists), ``merchantId``, ``externalRef``, ``createdFrom`` /
+        ``createdTo`` (ISO 8601; a date alone is a Caracas day), ``limit``. Iterate the result for every payment."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Payments_listPayments", m.PaymentListDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def export(self, params: Optional[Params] = None, **options: Unpack[RequestOptions]) -> str:
+        """The same filters as ``list()``, as CSV text (header row, oldest first).
+
+        At most 366 days (default: the last 31) and 50,000 rows: a longer range raises ``export_range_too_long``,
+        a bigger export ``export_too_large``."""
+        body = self._request_json("Payments_exportPayments", query=dict(params or {}), options=options)
+        return body if isinstance(body, str) else ""
 
     def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.PaymentReceiptDto:
         return self._request_model("Payments_getPayment", m.PaymentReceiptDto, path={"id": id}, options=options)
@@ -472,17 +504,51 @@ class Products(SyncAPIResource):
 
 
 class PaymentLinks(SyncAPIResource):
-    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> m.PaymentLinkResponseDto:
-        return self._request_model("PaymentLinks_get", m.PaymentLinkResponseDto, path={"id": id}, options=options)
+    """One-shot, fixed-amount links (``kind: one_shot``, ids ``plk_…``) and product links (``kind: product``,
+    created with ``products.create_link()``)."""
+
+    def create(
+        self, params: Union[m.CreateOneShotPaymentLinkDto, Params], **options: Unpack[RequestOptions]
+    ) -> m.OneShotPaymentLinkDto:
+        """A one-shot link for a fixed USD amount, e.g. ``{"amount": "25.00", "description": "Torta"}``.
+
+        Share its ``url``; it is paid once. Seller accounts only."""
+        return self._request_model("PaymentLinks_create", m.OneShotPaymentLinkDto, body=params, options=options)
+
+    def list(
+        self, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.PaymentLinkListDto, PaymentLink]:
+        """One-shot and product links, newest first; each item has ``kind``. Filter with ``kind`` and ``status``."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "PaymentLinks_list", m.PaymentLinkListDto, query={**query, "cursor": cursor}, options=options
+            ),
+            query.get("cursor"),
+        )
+
+    def retrieve(self, id: str, **options: Unpack[RequestOptions]) -> PaymentLink:
+        """A one-shot (``OneShotPaymentLinkDto``) or product (``PaymentLinkResponseDto``) link; check ``kind``."""
+        raw = self._request_json("PaymentLinks_get", path={"id": id}, options=options)
+        return _payment_link(raw)
+
+    def cancel(self, id: str, **options: Unpack[RequestOptions]) -> m.OneShotPaymentLinkDto:
+        """Cancel an ``ACTIVE`` or ``EXPIRED`` one-shot link (cancelling a cancelled link is a no-op).
+
+        A paid link or a product link raises ``payment_link_not_cancellable``; turn product links off with
+        ``update(id, {"status": "disabled"})``."""
+        return self._request_model("PaymentLinks_cancel", m.OneShotPaymentLinkDto, path={"id": id}, options=options)
 
     def update(
         self, id: str, params: Union[m.UpdatePaymentLinkDto, Params], **options: Unpack[RequestOptions]
     ) -> m.PaymentLinkResponseDto:
+        """Product links only: one-shot links raise ``payment_link_not_editable``."""
         return self._request_model(
             "PaymentLinks_update", m.PaymentLinkResponseDto, path={"id": id}, body=params, options=options
         )
 
     def delete(self, id: str, **options: Unpack[RequestOptions]) -> None:
+        """Product links only: one-shot links raise ``payment_link_not_editable``."""
         return self._request_none("PaymentLinks_remove", path={"id": id}, options=options)
 
 
@@ -623,6 +689,53 @@ class WebhookEndpoints(SyncAPIResource):
     def send_test(self, **options: Unpack[RequestOptions]) -> m.NotificationTestResponseDto:
         """Send a ``notification.test`` delivery to your endpoints."""
         return self._request_model("Notifications_sendTest", m.NotificationTestResponseDto, options=options)
+
+    def list_deliveries(
+        self, id: str, params: Optional[Params] = None, **options: Unpack[RequestOptions]
+    ) -> SyncPage[m.WebhookDeliveryListDto, m.WebhookDeliveryDto]:
+        """One endpoint's deliveries, newest first: status (``pending``, ``retrying``, ``success``, ``failed``),
+        attempts, the next automatic retry and your endpoint's last reply. Filter with ``status`` and ``event``;
+        iterate the result for every delivery."""
+        query = dict(params or {})
+        return SyncPage(
+            lambda cursor: self._request_model(
+                "Webhooks_listDeliveries",
+                m.WebhookDeliveryListDto,
+                path={"id": id},
+                query={**query, "cursor": cursor},
+                options=options,
+            ),
+            query.get("cursor"),
+        )
+
+    def resend_delivery(self, id: str, delivery_id: str, **options: Unpack[RequestOptions]) -> m.WebhookDeliveryDto:
+        """Send a delivery again now, with the same body and ``VexPay-Event-Id`` (deduplicate on it).
+
+        A success clears any scheduled retry."""
+        return self._request_model(
+            "Webhooks_resendDelivery",
+            m.WebhookDeliveryDto,
+            path={"id": id, "deliveryId": delivery_id},
+            options=options,
+        )
+
+    def rotate_secret(
+        self,
+        id: str,
+        params: Union[m.RotateWebhookSecretDto, Params, None] = None,
+        **options: Unpack[RequestOptions],
+    ) -> m.RotateWebhookSecretResponseDto:
+        """Issue a new signing secret; ``secret`` is shown only in this response, so store it.
+
+        The previous secret keeps signing (a second ``v1=`` entry) for ``expiresInHours`` (0–168, default 24);
+        pass ``{"expiresInHours": 0}`` to stop it at once after a leak."""
+        return self._request_model(
+            "Webhooks_rotateSecret",
+            m.RotateWebhookSecretResponseDto,
+            path={"id": id},
+            body=params if params is not None else {},
+            options=options,
+        )
 
 
 # ── crypto (USDT, USDC) ───────────────────────────────────────────────────────

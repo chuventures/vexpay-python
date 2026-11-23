@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.26.0
+
+- Webhook endpoints: `webhook_endpoints.list_deliveries(id, {"status", "event", "limit", "cursor"})` (iterate for every page), `resend_delivery(id, delivery_id)` and `rotate_secret(id, {"expiresInHours": …})`. Failed deliveries are now retried automatically (`retrying` with `nextAttemptAt`), always with the same body and `VexPay-Event-Id`, so deduplicate on it. During a rotation both secrets sign (two `v1=` entries); `Webhook.construct_event` already accepts either.
+- Payments: `payments.list(filters)` (`status`, `method`, `merchantId`, `externalRef`, `createdFrom`, `createdTo`; iterate for every page) and `payments.export(filters)`, which returns the CSV text (at most 366 days and 50,000 rows: `export_range_too_long`, `export_too_large`).
+- Payment links: `payment_links.create({"amount", "description", "reference", "expiresAt"})` makes a one-shot link (`OneShotPaymentLinkDto`), `payment_links.list({"kind", "status"})` lists one-shot and product links, and `payment_links.cancel(id)` cancels a one-shot link. `payment_links.retrieve(id)` now returns `OneShotPaymentLinkDto` or `PaymentLinkResponseDto` (check `kind`); `update` and `delete` are unchanged and work on product links only. `PaymentLinkResponseDto` gains `kind` (`"product"`).
+- Errors: `VexPayError.code` reads the API's new stable `code` field first and falls back to `error`, so validation errors now have a code (`validation_failed`) and risk or bank declines keep theirs (`CARD_VELOCITY_BLOCKED`, `AM04`). New `VexPayError.doc_url` links to the code on https://docs.vexpay.app/errors.
+
+- `PagoMovilReceivingAccountDto` (`payments.pago_movil.receiving_account()`) no longer has `provider`: the API stopped returning it (tenant-facing responses never name the bank provider). Use `bankCode` / `bankName` to show the buyer where to pay.
+
 ## 0.25.0
 
 - Webhooks: `PaymentWebhookData` gains `transfers` (`PaymentWebhookTransfer`: `reference`, `vesAmount`, `at`), `paidVesAmount`, `missingVesAmount`, `expiresAt` and `refundPending`. A Pago Móvil paid in several transfers now sends `payment.pending` for each transfer that does not complete it yet (same `paymentId` every time, so handle it idempotently). If the rest never arrives, the expired `payment.failed` carries `paidVesAmount`, `transfers` and `refundPending: True`: VEX Pay support refunds the buyer.
